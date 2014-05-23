@@ -1,0 +1,4 @@
+csc /t:library /out:GadgetHelper.dll main.cs
+tlbexp GadgetHelper.dll /out:GadgetHelper.tlb
+regasm /tlb:GadgetHelper.tlb GadgetHelper.dll
+gacutil /I GadgetHelper.dll
