@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+<style>
+	body {
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
+	}
+</style>
+</head>
+<body>
+<script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
+<script src="socket.io/socket.io.js"></script>
+<script src="three.js/three.min.js"></script>
+<script src="share/game.js"></script>
+<script>
+var renderer = new THREE.WebGLRenderer(),
+	camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 10000)
+
+GAME.initWorld(camera)
+GAME.connectToServer('/')
+$(window).bind('keydown keyup', GAME.localInput)
+
+document.body.appendChild(renderer.domElement)
+$(window).bind('resize', function(e) {
+	camera.position.z = 1000
+	camera.aspect = window.innerWidth / window.innerHeight
+	camera.updateProjectionMatrix()
+	renderer.setSize(window.innerWidth, window.innerHeight)
+}).trigger('resize')
+
+var lastTimeStamp = 0,
+	gameTick = newTicker(10, GAME.run, 10)
+function render(t) {
+	requestAnimationFrame(render)
+	renderer.render(GAME.scene, camera)
+	if (t > lastTimeStamp)
+		gameTick.run(t - lastTimeStamp)
+	lastTimeStamp = t
+}
+render()
+
+</script>
+</body>
+</html>

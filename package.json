@@ -1,0 +1,11 @@
+{
+	"name": "thw",
+	"description": "THW",
+	"version": "0.0.1",
+	"private": true,
+	"dependencies": {
+		"three": "*",
+		"express": ">3.x",
+		"socket.io": "1.x"
+	}
+}
