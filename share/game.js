@@ -188,9 +188,14 @@ var GAME = (function(THREE) {
 		var create = proto.create
 		return newClass(function(data) {
 			if (!data) return
+			var para = data.para || (data.para = { })
+			if (!para.color) {
+				var ls = 'red/blue/green/yellow/black/white/orange/gray/pink'.split('/')
+				para.color = ls[Math.floor(Math.random() * ls.length)]
+			}
 			data.mesh = new THREE.Mesh(
 				new THREE.BoxGeometry(200, 200, 200),
-				new THREE.MeshBasicMaterial({ color:0xff0000, wireframe:true })
+				new THREE.MeshBasicMaterial({ color: para.color, wireframe: true, })
 			)
 			data.mesh.geometry.computeBoundingBox()
 			data.mesh.position.z -= data.mesh.geometry.boundingBox.min.z - 1
@@ -208,6 +213,7 @@ var GAME = (function(THREE) {
 				cls: obj.cls,
 				id: obj.id,
 				sid: obj.sid,
+				para: obj.para,
 				position: mesh.position.toArray(),
 				rotation: mesh.rotation.toArray(),
 				velocity: mesh.velocity.toArray(),
