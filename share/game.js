@@ -128,7 +128,7 @@ var GAME = (function(THREE) {
 	function updateVector(v) {
 		var d = v.to.clone().sub(v)
 		if (d.length() > 1)
-			v.add(d.multiplyScalar(0.1))
+			v.add(d.multiplyScalar(0.2))
 		else
 			v.to = undefined
 	}
@@ -199,6 +199,7 @@ var GAME = (function(THREE) {
 			)
 			data.mesh.geometry.computeBoundingBox()
 			data.mesh.position.z -= data.mesh.geometry.boundingBox.min.z - 1
+			data.mesh.rotation.z = Math.random() * Math.PI * 2
 			create.call(this, data)
 		}, proto)
 	})(new _t.Basic())
