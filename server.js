@@ -3,7 +3,7 @@ var express = require('express'),
 	srv = require('http').Server(app),
 	io = require('socket.io')(srv)
 
-srv.listen(10080)
+srv.listen(18080)
 
 app.use('/share', express.static(__dirname+'/share'))
 	.use(express.static(__dirname+'/html'))
