@@ -78,6 +78,7 @@ function updateKeyState(ks, e) {
 	ks.ctrlKey = e.ctrlKey
 	// translate key code to char
 	var c = {
+		32: 'SPACE',
 		37: 'LEFT',
 		38: 'UP',
 		39: 'RIGHT',
@@ -213,6 +214,8 @@ var Player = (function(proto) {
 			ctrl.moveBackward = ks.S || ks.DOWN
 			ctrl.moveLeft  = ks.A || ks.LEFT
 			ctrl.moveRight = ks.D || ks.RIGHT
+			ctrl.crouch = ks.ctrlKey
+			ctrl.jump = ks.SPACE
 		}
 		this.model.update(dt / 1000)
 		run.apply(this, arguments)
@@ -248,7 +251,7 @@ var Client = function(url) {
 	_t.camera.lookAt(new THREE.Vector3(0, 0, 0))
 
 	_t.controls = new THREE.OrbitControls(_t.camera)
-	_t.controls.damping = 0.2
+	_t.controls.noKeys = true
 
 	function initWorld() {
 		var ground = new THREE.Mesh(
