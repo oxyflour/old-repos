@@ -98,8 +98,8 @@ function newClass(create, proto) {
 
 function updateVector(v) {
 	var d = v.to.clone().sub(v)
-	if (d.length() > 0.1)
-		v.add(d.multiplyScalar(0.1))
+	if (d.length() > 1)
+		v.add(d.multiplyScalar(0.2))
 	else
 		v.to = undefined
 }
@@ -186,23 +186,10 @@ var Basic = (function(proto) {
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
 		console.log('object #' + this.id + ' killed')
-	},
-	sync: function(data) {
 	}
 })
 
 var Player = (function(proto) {
-	proto.sync = function(data) {
-		if (data) {
-			this.model.bodyOrientation = data.orientation
-			if (this.skin != data.skin)
-				this.model.setSkin(this.skin = data.skin)
-		}
-		else return {
-			orientation: this.model.bodyOrientation,
-			skin: this.skin
-		}
-	}
 	// run with control
 	var run = proto.run
 	proto.run = function(dt) {
@@ -228,9 +215,7 @@ var Player = (function(proto) {
 			var model = data.modelBase
 			data.model.scale = model.scale
 			data.model.shareParts(model)
-			if (!data.skin)
-				data.skin = Math.floor(Math.random() * model.conf.skins.length)
-			data.model.setSkin(data.skin)
+			data.model.setSkin(0)
 			data.model.setWeapon(0)
 			data.mesh = data.model.root
 		}
@@ -274,25 +259,6 @@ var Client = function(url) {
 
 	_t.socket = null
 	_t.sobjs = { }
-	function getSyncData(objs, action) {
-		var data = {
-			action: action
-		}
-		data.objs = ieach(objs || _t.objs, function(i, obj, list) {
-			if (!obj || obj.finished) return
-			var mesh = obj.mesh
-			list.push({
-				data: obj.sync(),
-				cls: obj.cls,
-				id: obj.id,
-				sid: obj.sid,
-				position: mesh.position.toArray(),
-				rotation: mesh.rotation.toArray(),
-				velocity: mesh.velocity.toArray(),
-			})
-		}, [])
-		return data
-	}
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
@@ -307,60 +273,41 @@ var Client = function(url) {
 			obj.mesh.velocity.fromArray(data.velocity)
 			_t.sobjs[data.id] = obj
 		}
-		if (data.data)
-			obj.sync(data.data)
 		return obj
 	}
-	_t.hosting = false
 	function connectToServer(url) {
 		_t.socket = io.connect(url)
 		//
-		_t.socket.on('ping', function(data) {
-			_t.socket.emit('ping')
+		_t.socket.on('sync+', function(data) {
+			data.objs.forEach(syncObject)
 		})
-		_t.socket.on('host', function(clients) {
-			// clear unused sessions
-			_t.objs.forEach(function(obj) {
-				if (obj && obj.sid)
-					obj.finished = !clients[obj.sid]
+		_t.socket.on('sync-', function(data) {
+			data.objs.forEach(function(d) {
+				var obj = _t.sobjs[d.id]
+				if (obj) {
+					obj.finished = true
+					delete _t.sobjs[d.id]
+				}
 			})
-			// start hosting
-			if (!_t.hosting) _t.hosting = setInterval(function() {
-				_t.socket.emit('sync', getSyncData())
-			}, 200)
-		})
-		_t.socket.on('join', function(sid) {
-			newObject({ cls:'Player', sid:sid, id:Date.now() })
 		})
 		_t.socket.on('sync', function(data) {
-			if (data.action == '+') {
-				data.objs.forEach(syncObject)
-			}
-			else if (data.action == '-') {
-				data.objs.forEach(function(d) {
-					var obj = _t.sobjs[d.id]
-					if (obj) {
-						obj.finished = true
-						delete _t.sobjs[d.id]
-					}
-				})
-			}
-			else {
-				keach(_t.sobjs, function(id, obj) {
-					obj.finished = true
-				})
-				_t.sobjs = ieach(data.objs, function(i, d, objs) {
-					var obj = syncObject(d)
-					obj.finished = false
-					objs[obj.id] = obj
-				}, { })
-			}
+			keach(_t.sobjs, function(id, obj) {
+				obj.finished = true
+			})
+			_t.sobjs = ieach(data.objs, function(i, d, objs) {
+				var obj = syncObject(d)
+				obj.finished = false
+				objs[obj.id] = obj
+			}, { })
 		})
+		//
 		_t.socket.on('input', function(data) {
 			data.forEach(function(e) {
 				_t.inputs.push(e)
 			})
 		})
+		// join now!
+		_t.socket.emit('join')
 	}
 
 	_t.inputs = [ ]
@@ -414,9 +361,9 @@ var Client = function(url) {
 		return obj
 	}
 
+	initWorld()
 	var res = new Resource()
 	checkComplete(res, function() {
-		initWorld()
 		initInput()
 		connectToServer(url)
 	})
@@ -427,57 +374,97 @@ var Client = function(url) {
 var Server = function(io) {
 	var _t = this
 
-	function getClients() {
-		return keach(clients, function(k, s, d) {
-			d[k] = true
-		}, { })
+	_t.clients = { }
+	_t.keys = { }
+	_t.inputs = [ ]
+	function getSyncData(objs) {
+		var data = { }
+		data.objs = ieach(objs || _t.objs, function(i, obj, list) {
+			if (!obj) return
+			var mesh = obj.mesh
+			list.push({
+				cls: obj.cls,
+				id: obj.id,
+				sid: obj.sid,
+				position: mesh.position.toArray(),
+				rotation: mesh.rotation.toArray(),
+				velocity: mesh.velocity.toArray(),
+			})
+		}, [])
+		return data
 	}
-	function setHost(socket) {
-		socket.emit('host', getClients())
-		console.log('host ' + socket.id + ' starting')
-		return socket
+	function beginServer(io) {
+		io.on('connection', function(socket) {
+			var sid = socket.id
+			_t.clients[sid] = socket
+			console.log('client ' + sid + ' connected')
+
+			var obj = null
+			socket.on('join', function() {
+				if (!obj) {
+					obj = newObject({ cls:'Player', sid:sid })
+					socket.emit('sync', getSyncData())
+					socket.broadcast.emit('sync+', getSyncData([obj]))
+				}
+			})
+
+			socket.on('input', function(data) {
+				data.forEach(function(e) {
+					_t.inputs.push(e)
+				})
+				socket.broadcast.emit('input', data)
+			})
+
+			setInterval(function() {
+				socket.emit('sync', getSyncData())
+			}, 500)
+
+			socket.on('disconnect', function() {
+				if (obj) {
+					obj.finished = true
+					socket.broadcast.emit('sync-', getSyncData([obj]))
+					obj = null
+				}
+				delete _t.clients[sid]
+				console.log('client ' + sid + ' disconnected')
+			})
+		})
 	}
-	function pingHost(socket) {
-		socket.broadcast.emit('ping')
-		console.log('host ' + socket.id + ' left, waiting for a new host')
-		return null
+
+	_t.objs = newAnimateList()
+	_t.run = function(dt) {
+		if (_t.inputs.length) {
+			_t.inputs.forEach(function(e) {
+				var ws = _t.keys[e.sid]
+				ws && updateKeyState(ws, e)
+			})
+			_t.inputs.length = 0
+		}
+		_t.objs.run(dt)
 	}
 
-	var host = null,
-		clients = { }
-	io.on('connection', function(socket) {
-		var sid = socket.id
-		clients[sid] = socket
-		console.log('client ' + sid + ' connected')
-		if (!host) host = setHost(socket)
+	function newObject(data) {
+		data.id = newObject.id = (newObject.id || 0) + 1
+		//
+		var obj = null
+		if (data.cls == 'Player') {
+			data.keys = _t.keys[data.sid] ||
+				(_t.keys[data.sid] = { })
+			obj = new Player(data)
+		}
+		else {
+			obj = new Basic(data)
+		}
+		_t.objs.add(obj)
+		return obj
+	}
 
-		socket.emit('ping')
-		socket.on('ping', function(data) {
-			if (!host) host = setHost(socket)
-		})
-
-		socket.on('sync', function(data) {
-			if (host === socket)
-				socket.broadcast.emit('sync', data)
-		})
-
-		socket.on('input', function(data) {
-			socket.broadcast.emit('input', data)
-		})
-
-		socket.on('disconnect', function() {
-			delete clients[sid]
-			console.log('client ' + sid + ' disconnected')
-
-			if (host === socket)
-				host = pingHost(socket)
-			else if (host)
-				host.emit('host', getClients())
-		})
-
-		// join now!
-		host.emit('join', sid)
+	var res = new Resource({ no_load:true })
+	checkComplete(res, function() {
+		beginServer(io)
 	})
+
+	return _t
 }
 
 if (typeof module !== 'undefined') {

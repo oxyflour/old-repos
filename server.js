@@ -3,43 +3,8 @@ var express = require('express'),
 	srv = require('http').Server(app),
 	io = require('socket.io')(srv)
 
-srv.listen(18080)
-
 app.use('/share', express.static(__dirname+'/share'))
 	.use(express.static(__dirname+'/html'))
+srv.listen(18080)
 
-var game = require('./share/game.js').game
-game.initWorld()
-setInterval(function() {
-	game.run(10)
-}, 10)
-
-var clients = { }
-io.on('connection', function(socket) {
-	var sid = socket.id
-	clients[sid] = socket
-	console.log('client ' + sid + ' connected')
-
-	var obj = null
-	socket.on('join', function() {
-		obj = new game.Player({ sid:sid })
-		socket.broadcast.emit('sync+', game.getSyncData([obj]))
-	})
-	socket.on('disconnect', function() {
-		if (obj) {
-			obj.finished = true
-			socket.broadcast.emit('sync-', game.getSyncData([obj]))
-		}
-		delete clients[sid]
-		console.log('client ' + sid + ' disconnected')
-	})
-
-	socket.on('input', function(e) {
-		e.sid = sid
-		game.remoteInput(e)
-	})
-
-	setInterval(function() {
-		socket.emit('sync', game.getSyncData())
-	}, 100)
-})
+new require('./share/game.js').Server(io)
