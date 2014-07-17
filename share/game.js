@@ -242,13 +242,20 @@ var Client = function(url) {
 	var _t = this
 
 	_t.scene = new THREE.Scene()
+
+	_t.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 10000)
+	_t.camera.position.set(0, 100, -500)
+	_t.camera.lookAt(new THREE.Vector3(0, 0, 0))
+
+	_t.controls = new THREE.OrbitControls(_t.camera)
+	_t.controls.damping = 0.2
+
 	function initWorld() {
 		var ground = new THREE.Mesh(
 			new THREE.PlaneGeometry(2000, 2000, 5, 5),
 			new THREE.MeshBasicMaterial({ color:0x9db3b5, overdraw:true })
 		)
 		ground.rotation.x = - Math.PI / 2
-		ground.position.y = -72
 		ground.receiveShadow = true
 		_t.scene.add(ground)
 
@@ -330,7 +337,11 @@ var Client = function(url) {
 			}, 200)
 		})
 		_t.socket.on('join', function(sid) {
-			newObject({ cls:'Player', sid:sid, id:Date.now() })
+			newObject({
+				cls: 'Player',
+				sid: sid,
+				id: Date.now()
+			})
 		})
 		_t.socket.on('sync', function(data) {
 			if (data.action == '+') {
@@ -408,6 +419,10 @@ var Client = function(url) {
 		}
 		else {
 			obj = new Basic(data)
+		}
+		//
+		if (obj.sid == _t.socket.io.engine.id) {
+			obj.mesh.add(_t.camera)
 		}
 		//
 		_t.objs.add(obj)

@@ -13,31 +13,30 @@
 <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
 <script src="socket.io/socket.io.js"></script>
 <script src="js/three.min.js"></script>
-<script src="js/controls/TrackballControls.js"></script>
+<script src="js/controls/OrbitControls.js"></script>
 <script src="share/MD2CharacterComplex.js"></script>
 <script src="share/game.js"></script>
 <script>
 
 // init three environment
-var renderer = new THREE.WebGLRenderer(),
-	camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 10000)
-
-document.body.appendChild(renderer.domElement)
-$(window).bind('resize', function(e) {
-	camera.position.set(0, 150, 1300)
-	camera.aspect = window.innerWidth / window.innerHeight
-	camera.updateProjectionMatrix()
-	renderer.setSize(window.innerWidth, window.innerHeight)
-}).trigger('resize')
+var renderer = new THREE.WebGLRenderer()
 
 // start game client
 var game = new Client('/')
+
+document.body.appendChild(renderer.domElement)
+$(window).bind('resize', function(e) {
+	game.camera.aspect = window.innerWidth / window.innerHeight
+	game.camera.updateProjectionMatrix()
+	renderer.setSize(window.innerWidth, window.innerHeight)
+}).trigger('resize')
 
 var lastTimeStamp = 0,
 	gameTick = newTicker(10, game.run, 10)
 function render(t) {
 	requestAnimationFrame(render)
-	renderer.render(game.scene, camera)
+	game.controls.update()
+	renderer.render(game.scene, game.camera)
 	if (t > lastTimeStamp)
 		gameTick.run(t - lastTimeStamp)
 	lastTimeStamp = t
