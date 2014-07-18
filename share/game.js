@@ -105,11 +105,6 @@ function updateVector(v) {
 		v.to = undefined
 }
 
-function updateValue(from, to) {
-	var d = to - from
-	return d > 0.1 ? from + d * 0.1 : from
-}
-
 function checkComplete(list, callback) {
 	function check() {
 		var total = 0,
@@ -200,7 +195,7 @@ var Basic = (function(proto) {
 var Player = (function(proto) {
 	proto.sync = function(data) {
 		if (data) {
-			this.model.bodyOrientationTo = data.orientation
+			this.model.bodyOrientation = data.orientation
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
@@ -222,10 +217,7 @@ var Player = (function(proto) {
 			ctrl.crouch = ks.ctrlKey
 			ctrl.jump = ks.SPACE
 		}
-		var m = this.model
-		m.update(dt / 1000)
-		if (m.bodyOrientation !== m.bodyOrientationTo)
-			m.bodyOrientation = updateValue(m.bodyOrientation, m.bodyOrientationTo)
+		this.model.update(dt / 1000)
 		run.apply(this, arguments)
 	}
 	// cerate model
