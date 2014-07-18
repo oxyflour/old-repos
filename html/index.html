@@ -18,13 +18,17 @@
 <script src="share/game.js"></script>
 <script>
 
-// init three environment
-var renderer = null
+// dummy renderer
+var renderer = {
+	domElement: document.createElement('div'),
+	setSize: function() { },
+	render: function() { },
+}
 try {
 	renderer = new THREE.WebGLRenderer()
 }
 catch (e) {
-	renderer = new THREE.CanvasRenderer()
+//	renderer = new THREE.CanvasRenderer()
 }
 
 // start game client
