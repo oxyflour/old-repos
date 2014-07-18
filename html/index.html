@@ -26,6 +26,10 @@ var renderer = {
 }
 try {
 	renderer = new THREE.WebGLRenderer()
+	renderer.shadowMapEnabled = true;
+	renderer.shadowMapCascade = true;
+	renderer.shadowMapType = THREE.PCFSoftShadowMap;
+	//renderer.shadowMapDebug = true;
 }
 catch (e) {
 //	renderer = new THREE.CanvasRenderer()
