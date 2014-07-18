@@ -197,7 +197,7 @@ var Basic = (function(proto) {
 var Player = (function(proto) {
 	proto.sync = function(data) {
 		if (data) {
-			this.model.bodyOrientation = this.model.bodyOrientation*0.2 + data.orientation*0.8
+			this.model.bodyOrientation = this.model.bodyOrientation*0.5 + data.orientation*0.5
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
