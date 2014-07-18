@@ -179,10 +179,12 @@ var Basic = (function(proto) {
 		// move!
 		var m = this.mesh,
 			p = m.position,
+			r = m.rotation,
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
 		if (p.to) updateVector(p)
+		if (r.to) updateVector(r)
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -195,7 +197,7 @@ var Basic = (function(proto) {
 var Player = (function(proto) {
 	proto.sync = function(data) {
 		if (data) {
-			this.model.bodyOrientation = data.orientation
+			this.model.bodyOrientation = this.model.bodyOrientation*0.2 + data.orientation*0.8
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
@@ -307,7 +309,7 @@ var Client = function(url) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
 			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
-			obj.mesh.rotation.fromArray(data.rotation)
+			obj.mesh.rotation.to = new THREE.Vector3().fromArray(data.rotation)
 			obj.mesh.velocity.fromArray(data.velocity)
 		}
 		else {
