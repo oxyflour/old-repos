@@ -30,6 +30,7 @@ try {
 	renderer.shadowMapCascade = true;
 	renderer.shadowMapType = THREE.PCFSoftShadowMap;
 	//renderer.shadowMapDebug = true;
+	renderer.setClearColor(0xffffff, 1);
 }
 catch (e) {
 //	renderer = new THREE.CanvasRenderer()
@@ -49,8 +50,9 @@ var lastTimeStamp = 0,
 	gameTick = newTicker(10, game.run, 10)
 function render(t) {
 	requestAnimationFrame(render)
-	game.controls.update()
 	renderer.render(game.scene, game.camera)
+
+	game.controls.update()
 	if (t > lastTimeStamp)
 		gameTick.run(t - lastTimeStamp)
 	lastTimeStamp = t

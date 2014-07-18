@@ -97,10 +97,15 @@ function newClass(create, proto) {
 	return create
 }
 
-function updateVector(v) {
-	var d = v.to.clone().sub(v)
-	if (d.length() > 0.01)
-		v.add(d.multiplyScalar(0.1))
+function updateVector(v, f, d) {
+	var dx = v.to.x - v.x,
+		dy = v.to.y - v.y,
+		dz = v.to.z - v.z,
+		ds = dx*dx + dy*dy + dz*dz
+	f = f || 0.1
+	d = d || 0.0001
+	if (ds > f)
+		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
 	else
 		v.to = undefined
 }
@@ -179,10 +184,12 @@ var Basic = (function(proto) {
 		// move!
 		var m = this.mesh,
 			p = m.position,
+			r = m.rotation,
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		if (p.to) updateVector(p)
+		if (p.to) updateVector(p, 0.1)
+		if (r.to) updateVector(r, 0.05)
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -312,7 +319,7 @@ var Client = function(url) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
 			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
-			obj.mesh.rotation.fromArray(data.rotation)
+			obj.mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
 			obj.mesh.velocity.fromArray(data.velocity)
 		}
 		else {
