@@ -322,7 +322,7 @@ var Client = function(url) {
 		return obj
 	}
 	_t.hosting = false
-	function connectToServer(url) {
+	function connectToServer(url, join) {
 		_t.socket = io.connect(url)
 		//
 		_t.socket.on('ping', function(data) {
@@ -375,6 +375,9 @@ var Client = function(url) {
 				_t.inputs.push(e)
 			})
 		})
+
+		if (join)
+			_t.socket.emit('join')
 	}
 
 	_t.inputs = [ ]
@@ -436,7 +439,7 @@ var Client = function(url) {
 	checkComplete(res, function() {
 		initWorld()
 		initInput()
-		connectToServer(url)
+		connectToServer(url, location.search != '?watch')
 	})
 
 	return _t
@@ -450,33 +453,38 @@ var Server = function(io) {
 			d[k] = true
 		}, { })
 	}
-	function setHost(socket) {
-		socket.emit('host', getClients())
-		console.log('host ' + socket.id + ' starting')
-		return socket
-	}
-	function pingHost(socket) {
-		socket.broadcast.emit('ping')
-		console.log('host ' + socket.id + ' left, waiting for a new host')
-		return null
-	}
 
 	var host = null,
 		clients = { }
+	function setAsHost(socket) {
+		host = socket
+		socket.emit('host', getClients())
+		console.log('client ' + socket.id + ' is now hosting')
+	}
+	function pingForHost(socket) {
+		host = null
+		socket.broadcast.emit('ping')
+		console.log('waiting for a new host...')
+	}
 	io.on('connection', function(socket) {
 		var sid = socket.id
 		clients[sid] = socket
 		console.log('client ' + sid + ' connected')
-		if (!host) host = setHost(socket)
+		if (!host) setAsHost(socket)
 
-		socket.emit('ping')
 		socket.on('ping', function(data) {
-			if (!host) host = setHost(socket)
+			if (!host)
+				setAsHost(socket)
 		})
 
 		socket.on('sync', function(data) {
 			if (host === socket)
 				socket.broadcast.emit('sync', data)
+		})
+
+		socket.on('join', function() {
+			if (host)
+				host.emit('join', sid)
 		})
 
 		socket.on('input', function(data) {
@@ -488,13 +496,10 @@ var Server = function(io) {
 			console.log('client ' + sid + ' disconnected')
 
 			if (host === socket)
-				host = pingHost(socket)
+				pingForHost(socket)
 			else if (host)
 				host.emit('host', getClients())
 		})
-
-		// join now!
-		host.emit('join', sid)
 	})
 }
 

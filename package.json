@@ -8,7 +8,6 @@
     },
 	"dependencies": {
 		"three": "*",
-		"phantom": "*",
 		"express": ">3.x",
 		"socket.io": "1.x"
 	}

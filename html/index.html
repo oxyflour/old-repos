@@ -19,7 +19,13 @@
 <script>
 
 // init three environment
-var renderer = new THREE.WebGLRenderer()
+var renderer = null
+try {
+	renderer = new THREE.WebGLRenderer()
+}
+catch (e) {
+	renderer = new THREE.CanvasRenderer()
+}
 
 // start game client
 var game = new Client('/')
