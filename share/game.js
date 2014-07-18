@@ -188,8 +188,8 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		if (p.to) updateVector(p, 0.1)
-		if (r.to) updateVector(r, 0.05)
+		if (p.to) updateVector(p, 0.05)
+		if (r.to) updateVector(r, 0.03)
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -202,7 +202,7 @@ var Basic = (function(proto) {
 var Player = (function(proto) {
 	proto.sync = function(data) {
 		if (data) {
-			this.model.bodyOrientation = data.orientation
+			this.model.bodyOrientation = this.model.bodyOrientation*0.9 + data.orientation*0.1
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
