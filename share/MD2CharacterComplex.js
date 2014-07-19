@@ -442,6 +442,8 @@ THREE.MD2CharacterComplex = function () {
 
 	this.updateMovementModel = function ( delta ) {
 
+		this.bodyOrientation = this.root.rotation.y;
+
 		var controls = this.controls;
 
 		// speed based on controls
