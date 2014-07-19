@@ -452,6 +452,8 @@ var Client = function(url) {
 				(_t.keys[data.sid] = { })
 			data.modelBase = res.Player
 			obj = new Player(data)
+			if (obj.sid == _t.socket.io.engine.id)
+				obj.mesh.add(_t.camera)
 		}
 		else {
 			obj = new Basic(data)
@@ -459,12 +461,6 @@ var Client = function(url) {
 		//
 		_t.objs.add(obj)
 		//
-		if (obj.cls == 'Player' && obj.sid == _t.socket.io.engine.id) {
-			var gyro = new THREE.Gyroscope()
-			gyro.add(_t.camera)
-			obj.model.root.add(gyro)
-			//obj.mesh.add(_t.camera)
-		}
 		return obj
 	}
 
