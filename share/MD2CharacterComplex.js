@@ -142,11 +142,6 @@ THREE.MD2CharacterComplex = function () {
 		this.walkSpeed = config.walkSpeed;
 		this.crouchSpeed = config.crouchSpeed;
 
-		if (config.no_load) {
-			this.onLoadComplete()
-			return
-		}
-
 		this.loadCounter = config.weapons.length * 2 + config.skins.length + 1;
 
 		var weaponsTextures = []

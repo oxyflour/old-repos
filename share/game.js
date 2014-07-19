@@ -143,7 +143,6 @@ var Resource = function(data) {
 		model.loadParts(conf)
 		return model
 	})({
-		no_load: data && data.no_load,
 		baseUrl: 'models/ogro/',
 		body: 'ogro-light.js',
 		skins: ('grok.jpg|ogrobase.png|arboshak.png|ctf_r.png|ctf_b.png|darkam.png|'+
@@ -238,6 +237,7 @@ var Player = (function(proto) {
 			var model = data.modelBase
 			data.model.scale = model.scale
 			data.model.shareParts(model)
+			data.model.enableShadows(true)
 			if (!data.skin)
 				data.skin = Math.floor(Math.random() * model.conf.skins.length)
 			data.model.setSkin(data.skin)
@@ -251,18 +251,55 @@ var Player = (function(proto) {
 var Client = function(url) {
 	var _t = this
 
+	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 4000)
+	_t.camera.position.set(0, 150, -800)
+	_t.camera.lookAt(new THREE.Vector3())
+
 	_t.scene = new THREE.Scene()
+	_t.scene.fog = new THREE.Fog(0xffffff, 1000, 4000)
+	_t.scene.add(_t.camera)
 
-	_t.camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 10000)
-	_t.camera.position.set(0, 100, -500)
-	_t.camera.lookAt(new THREE.Vector3(0, 0, 0))
+	_t.scene.add(new THREE.AmbientLight(0x222222))
 
-	_t.controls = new THREE.OrbitControls(_t.camera)
+	var light = new THREE.DirectionalLight(0xffffff, 2.25)
+	light.position.set(200, 450, 500)
+	light.castShadow = true
+	light.shadowMapWidth = 1024
+	light.shadowMapHeight = 1024
+	light.shadowMapDarkness = 0.95
+	//light.shadowCameraVisible = true
+	light.shadowCascade = true
+	light.shadowCascadeCount = 3
+	light.shadowCascadeNearZ  = [-1.000, 0.995, 0.998]
+	light.shadowCascadeFarZ   = [ 0.995, 0.998, 1.000]
+	light.shadowCascadeWidth  = [1024, 1024, 1024]
+	light.shadowCascadeHeight = [1024, 1024, 1024]
+	_t.scene.add(light)
+
+	try {
+		_t.renderer = new THREE.WebGLRenderer({ antialias:true })
+	}
+	catch (e) {
+		_t.renderer = new THREE.CanvasRenderer()
+		//
+		_t.renderer.render = function() { }
+	}
+	_t.renderer.gammaInput = true
+	_t.renderer.gammaOutput = true
+	_t.renderer.shadowMapEnabled = true
+	_t.renderer.shadowMapCascade = true
+	_t.renderer.shadowMapType = THREE.PCFSoftShadowMap
+	//_t.renderer.shadowMapDebug = true
+	_t.renderer.setClearColor(_t.scene.fog.color, 1)
+	document.body.appendChild(_t.renderer.domElement)
+
+	_t.controls = new THREE.OrbitControls(_t.camera, _t.renderer.domElement)
 	_t.controls.noKeys = true
 
 	function initWorld() {
+		// init ground only
 		var ground = new THREE.Mesh(
-			new THREE.PlaneGeometry(8000, 8000, 5, 5),
+			new THREE.PlaneGeometry(16000, 16000),
 			new THREE.MeshPhongMaterial({
 				color: 0xffffff,
 				map: THREE.ImageUtils.loadTexture("textures/terrain/grasslight-big.jpg")
@@ -273,25 +310,6 @@ var Client = function(url) {
 		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
 		ground.receiveShadow = true
 		_t.scene.add(ground)
-
-		_t.scene.fog = new THREE.Fog(0xffffff, 1000, 4000)
-
-		_t.scene.add(new THREE.AmbientLight(0x222222))
-
-		var light = new THREE.DirectionalLight(0xffffff, 2.25)
-		light.position.set(200, 450, 500)
-		light.castShadow = true
-		light.shadowMapWidth = 1024
-		light.shadowMapHeight = 1024
-		light.shadowMapDarkness = 0.95
-		//light.shadowCameraVisible = true
-		light.shadowCascade = true
-		light.shadowCascadeCount = 3
-		light.shadowCascadeNearZ = [-1.000, 0.995, 0.998]
-		light.shadowCascadeFarZ  = [0.995, 0.998, 1.000]
-		light.shadowCascadeWidth = [1024, 1024, 1024]
-		light.shadowCascadeHeight = [1024, 1024, 1024]
-		_t.scene.add(light)
 	}
 
 	_t.socket = null
@@ -439,17 +457,20 @@ var Client = function(url) {
 			obj = new Basic(data)
 		}
 		//
-		if (obj.sid == _t.socket.io.engine.id) {
-			obj.mesh.add(_t.camera)
-		}
-		//
 		_t.objs.add(obj)
+		//
+		if (obj.cls == 'Player' && obj.sid == _t.socket.io.engine.id) {
+			var gyro = new THREE.Gyroscope()
+			gyro.add(_t.camera)
+			obj.model.root.add(gyro)
+			//obj.mesh.add(_t.camera)
+		}
 		return obj
 	}
 
 	var res = new Resource()
+	initWorld()
 	checkComplete(res, function() {
-		initWorld()
 		initInput()
 		connectToServer(url, location.search != '?watch')
 	})

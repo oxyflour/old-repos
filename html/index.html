@@ -18,46 +18,27 @@
 <script src="share/game.js"></script>
 <script>
 
-// dummy renderer
-var renderer = {
-	domElement: document.createElement('div'),
-	setSize: function() { },
-	render: function() { },
-}
-try {
-	renderer = new THREE.WebGLRenderer()
-	renderer.shadowMapEnabled = true;
-	renderer.shadowMapCascade = true;
-	renderer.shadowMapType = THREE.PCFSoftShadowMap;
-	//renderer.shadowMapDebug = true;
-	renderer.setClearColor(0xffffff, 1);
-}
-catch (e) {
-//	renderer = new THREE.CanvasRenderer()
-}
-
 // start game client
-var game = new Client('/')
+var game = new Client('/'),
+	clock = new THREE.Clock()
 
-document.body.appendChild(renderer.domElement)
 $(window).bind('resize', function(e) {
 	game.camera.aspect = window.innerWidth / window.innerHeight
 	game.camera.updateProjectionMatrix()
-	renderer.setSize(window.innerWidth, window.innerHeight)
+	game.renderer.setSize(window.innerWidth, window.innerHeight)
 }).trigger('resize')
 
-var lastTimeStamp = 0,
-	gameTick = newTicker(10, game.run, 10)
-function render(t) {
+function render() {
 	requestAnimationFrame(render)
-	renderer.render(game.scene, game.camera)
-
-	game.controls.update()
-	if (t > lastTimeStamp)
-		gameTick.run(t - lastTimeStamp)
-	lastTimeStamp = t
+	var dt = clock.getDelta()
+	game.controls.update(dt)
+	game.renderer.render(game.scene, game.camera)
 }
 render()
+
+setInterval(function() {
+	game.run(10)
+}, 10)
 
 </script>
 </body>
