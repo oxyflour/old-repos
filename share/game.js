@@ -129,6 +129,13 @@ function checkComplete(list, callback) {
 	check()
 }
 
+function getReqsDict() {
+	return ieach(location.search.substr(1).split('&'), function(i, s, d) {
+		var st = s.split('=')
+		d[st[0]] = st[1] || ''
+	}, { })
+}
+
 var THREE = this.THREE || require('three'),
 	MD2CharacterComplex = THREE.MD2CharacterComplex || require('./MD2CharacterComplex.js')
 
@@ -249,6 +256,8 @@ var Player = (function(proto) {
 var Client = function(url) {
 	var _t = this
 
+	var conf = getReqsDict()
+
 	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 4000)
 	_t.camera.position.set(0, 150, -800)
 	_t.camera.lookAt(new THREE.Vector3())
@@ -261,12 +270,12 @@ var Client = function(url) {
 
 	var light = new THREE.DirectionalLight(0xffffff, 2.25)
 	light.position.set(200, 450, 500)
-	light.castShadow = true
+	light.castShadow = conf.noshadow === undefined
 	light.shadowMapWidth = 1024
 	light.shadowMapHeight = 1024
 	light.shadowMapDarkness = 0.95
 	//light.shadowCameraVisible = true
-	light.shadowCascade = true
+	light.shadowCascade = conf.noshadow === undefined
 	light.shadowCascadeCount = 3
 	light.shadowCascadeNearZ  = [-1.000, 0.995, 0.998]
 	light.shadowCascadeFarZ   = [ 0.995, 0.998, 1.000]
@@ -466,7 +475,7 @@ var Client = function(url) {
 	initWorld()
 	checkComplete(res, function() {
 		initInput()
-		connectToServer(url, location.search != '?watch')
+		connectToServer(url, conf.watch === undefined)
 	})
 
 	return _t
