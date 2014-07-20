@@ -249,18 +249,41 @@ var Basic = (function(proto) {
 		console.log('object #' + this.id + ' killed')
 	},
 	sync: function(data) {
+		var mesh = this.mesh
+		if (data) {
+			if (this.synced) {
+				mesh.position.to = new THREE.Vector3().fromArray(data.position)
+				mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
+				mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
+			}
+			else {
+				mesh.position.fromArray(data.position)
+				mesh.rotation.fromArray(data.rotation)
+				mesh.velocity.fromArray(data.velocity)
+				this.synced = true
+			}
+		}
+		else return {
+			position: mesh.position.toArray(),
+			rotation: mesh.rotation.toArray(),
+			velocity: mesh.velocity.toArray(),
+		}
 	}
 })
 
 var Player = (function(proto) {
+	var sync = proto.sync
 	proto.sync = function(data) {
 		if (data) {
+			sync.call(this, data)
 			// restore skin color
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
-		else return {
-			skin: this.skin
+		else {
+			data = sync.call(this)
+			data.skin = this.skin
+			return data
 		}
 	}
 	// run with control
@@ -454,33 +477,17 @@ var Client = function(url) {
 		}
 		data.objs = ieach(objs || _t.objs, function(i, obj, list) {
 			if (!obj || obj.finished) return
-			var mesh = obj.mesh
 			list.push({
 				data: obj.sync(),
 				cls: obj.cls,
 				id: obj.id,
 				sid: obj.sid,
-				position: mesh.position.toArray(),
-				rotation: mesh.rotation.toArray(),
-				velocity: mesh.velocity.toArray(),
 			})
 		}, [])
 		return data
 	}
 	function syncObject(data) {
-		var obj = _t.sobjs[data.id]
-		if (obj) {
-			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
-			obj.mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
-			obj.mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
-		}
-		else {
-			obj = newObject(data)
-			obj.mesh.position.fromArray(data.position)
-			obj.mesh.rotation.fromArray(data.rotation)
-			obj.mesh.velocity.fromArray(data.velocity)
-			_t.sobjs[data.id] = obj
-		}
+		var obj = _t.sobjs[data.id] || (_t.sobjs[data.id] = newObject(data))
 		if (data.data)
 			obj.sync(data.data)
 		return obj
