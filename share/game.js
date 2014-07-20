@@ -103,7 +103,7 @@ function updateVector(v, f, d) {
 		dy = to.y - v.y,
 		dz = to.z - v.z,
 		ds = dx*dx + dy*dy + dz*dz
-	f = f || 0.1
+	f = f || 0.05
 	d = d || 0.0001
 	if (ds > f)
 		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
@@ -226,23 +226,22 @@ var Basic = (function(proto) {
 		*/
 		if (p.to) updateVector(p)
 		if (r.to) updateVector(r)
+		if (v.to) updateVector(v)
 		// walk on terrain
 		if (this.terrain) {
-			this.terrain.check(p.x, p.z)
-			var position = new THREE.Vector3(p.x, 10240, p.z)
-				direction = new THREE.Vector3(0, -1, 0),
-				raycast = new THREE.Raycaster(position, direction),
-				intersect = raycast.intersectObject(this.terrain.current)
-			this.terrainY = intersect.length ? intersect[0].point.y + this.initialY : p.y
-			//	
+			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
+			// keep object on the ground
 			if (p.y < this.terrainY) {
 				p.y = this.terrainY
 				v.y = 0
 			}
+			// add gravity if object is over the ground
 			else if (p.y > this.terrainY) {
-				// add gravity
-				v.y -= 0.015 * dt
+				v.y -= 0.012 * dt
 			}
+			// keep terrain visible if there is a camera with this object
+			if (this.camera)
+				this.terrain.checkVisible(p.x, p.z)
 		}
 	},
 	quit: function() {
@@ -281,9 +280,9 @@ var Player = (function(proto) {
 		this.model.update(dt / 1000)
 		//
 		run.apply(this, arguments)
-		//
-		if (ctrl.jump && this.position.y == this.terrainY)
-			this.velocity.y = 5
+		// you can jump if on the ground
+		if (ctrl.jump && this.mesh.position.y == this.terrainY && !this.mesh.velocity.y)
+			this.mesh.velocity.y = 6
 	}
 	// cerate model
 	var create = proto.create
@@ -302,10 +301,13 @@ var Player = (function(proto) {
 			data.model.setSkin(data.skin)
 			data.model.setWeapon(0)
 			data.mesh = data.model.root
-			// remember the initial y position (half of height)
-			data.initialY = data.mesh.position.y
 		}
 		create.call(this, data)
+		// remember the initial y position (half of height)
+		this.initialY = this.mesh.position.y
+		// 
+		if (this.camera)
+			this.mesh.add(this.camera)
 	}, proto)
 })(new Basic())
 
@@ -325,22 +327,25 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		ih = 32,
 		// cached terrains
 		cached = { }
-	// current terrain
-	_t.current = null
-	_t.check = function(x, y) {
+	_t.getHeight = function(x, y) {
 		var i = Math.floor(x / gw + 0.5),
 			j = Math.floor(y / gh + 0.5),
 			k = i + ',' + j
-		if (_t.current !== cached[k]) {
-			_t.change(i, j)
-			_t.current = cached[k]
-		}
-	}
-	_t.change = function(i, j) {
+		var ground = cached[k] || (cached[k] = _t.create(i, j))
+		ground.visible = true
 		//
+		var origin = new THREE.Vector3(x, 10240, y)
+			direction = new THREE.Vector3(0, -1, 0),
+			raycast = new THREE.Raycaster(origin, direction),
+			intersect = raycast.intersectObject(ground)
+		if (intersect.length)
+			return intersect[0].point.y
+	}
+	_t.checkVisible = function(x, y) {
+		var i = Math.floor(x / gw + 0.5),
+			j = Math.floor(y / gh + 0.5)
 		for (var k in cached)
 			cached[k].visible = false
-		//
 		for (var m = i - 1; m <= i + 1; m ++) {
 			for (var n = j - 1; n <= j + 1; n ++) {
 				var k = m + ',' + n
@@ -467,7 +472,7 @@ var Client = function(url) {
 		if (obj) {
 			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
 			obj.mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
-			obj.mesh.velocity.fromArray(data.velocity)
+			obj.mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
 		}
 		else {
 			obj = newObject(data)
@@ -581,15 +586,15 @@ var Client = function(url) {
 		//
 		data.scene = _t.scene
 		data.terrain = _t.terrain
+		data.local = data.sid == _t.socket.io.engine.id
 		//
 		var obj = null
 		if (data.cls == 'Player') {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
+			data.camera = data.local && _t.camera
 			data.modelBase = _t.resource.Player
 			obj = new Player(data)
-			if (obj.sid == _t.socket.io.engine.id)
-				obj.mesh.add(_t.camera)
 		}
 		else {
 			obj = new Basic(data)
