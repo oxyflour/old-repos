@@ -222,7 +222,6 @@ var Basic = (function(proto) {
 		// simple interplotation
 		if (p.to) updateVector(p, 0.05, 0.001, 0.05)
 		if (r.to) updateVector(r)
-//		if (v.to) updateVector(v, 1)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
@@ -250,19 +249,16 @@ var Basic = (function(proto) {
 			if (this.synced) {
 				mesh.position.to = new THREE.Vector3().fromArray(data.position)
 				mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
-//				mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
 			}
 			else {
 				mesh.position.fromArray(data.position)
 				mesh.rotation.fromArray(data.rotation)
-//				mesh.velocity.fromArray(data.velocity)
 				this.synced = true
 			}
 		}
 		else return {
 			position: mesh.position.toArray(),
 			rotation: mesh.rotation.toArray(),
-			velocity: mesh.velocity.toArray(),
 		}
 	}
 })
@@ -300,7 +296,7 @@ var Player = (function(proto) {
 		//
 		run.apply(this, arguments)
 		// you can jump if on the ground
-		if (ctrl.jump && this.mesh.position.y == this.terrainY && !this.mesh.velocity.y)
+		if (ctrl.jump && this.mesh.position.y == this.terrainY)
 			this.mesh.velocity.y = 6
 	}
 	// cerate model
