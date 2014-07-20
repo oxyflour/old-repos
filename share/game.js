@@ -108,7 +108,7 @@ function updateVector(v, fx, fy, fz, d) {
 	fz = fz || fx
 	d = d || 0.0001
 	if (ds > f)
-		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
+		v.set(v.x + dx*fx, v.y + dy*fy, v.z + dz*fz)
 	else
 		v.to = null
 }
