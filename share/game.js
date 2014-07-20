@@ -239,7 +239,7 @@ var Basic = (function(proto) {
 				p.y = this.terrainY
 				v.y = 0
 			}
-			else if (this.terrainY > p.yt) {
+			else if (p.y > this.terrainY) {
 				// add gravity
 				v.y -= 0.015 * dt
 			}
