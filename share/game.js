@@ -97,13 +97,15 @@ function newClass(create, proto) {
 	return create
 }
 
-function updateVector(v, f, d) {
+function updateVector(v, fx, fy, fz, d) {
 	var to = v.to,
 		dx = to.x - v.x,
 		dy = to.y - v.y,
 		dz = to.z - v.z,
 		ds = dx*dx + dy*dy + dz*dz
-	f = f || 0.05
+	fx = fx || 0.05
+	fy = fy || fx
+	fz = fz || fx
 	d = d || 0.0001
 	if (ds > f)
 		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
@@ -218,7 +220,7 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		if (p.to) updateVector(p)
+		if (p.to) updateVector(p, 0.05, 0.001, 0.05)
 		if (r.to) updateVector(r)
 //		if (v.to) updateVector(v, 1)
 		// walk on terrain
