@@ -220,7 +220,7 @@ var Basic = (function(proto) {
 		// simple interplotation
 		if (p.to) updateVector(p)
 		if (r.to) updateVector(r)
-		if (v.to) updateVector(v, 0.01)
+		if (v.to) updateVector(v, 1)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
