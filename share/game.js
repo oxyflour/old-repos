@@ -220,7 +220,7 @@ var Basic = (function(proto) {
 		// simple interplotation
 		if (p.to) updateVector(p)
 		if (r.to) updateVector(r)
-		if (v.to) updateVector(v, 1)
+//		if (v.to) updateVector(v, 1)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
@@ -248,12 +248,12 @@ var Basic = (function(proto) {
 			if (this.synced) {
 				mesh.position.to = new THREE.Vector3().fromArray(data.position)
 				mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
-				mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
+//				mesh.velocity.to = new THREE.Vector3().fromArray(data.velocity)
 			}
 			else {
 				mesh.position.fromArray(data.position)
 				mesh.rotation.fromArray(data.rotation)
-				mesh.velocity.fromArray(data.velocity)
+//				mesh.velocity.fromArray(data.velocity)
 				this.synced = true
 			}
 		}
@@ -355,8 +355,7 @@ var Terrain = function(scene, heightMap, textureSrc) {
 			direction = new THREE.Vector3(0, -1, 0),
 			raycast = new THREE.Raycaster(origin, direction),
 			intersect = raycast.intersectObject(ground)
-		if (intersect.length)
-			return intersect[0].point.y
+		return intersect.length ? intersect[0].point.y : 0
 	}
 	_t.checkVisible = function(x, y) {
 		var i = Math.floor(x / gw + 0.5),
