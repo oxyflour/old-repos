@@ -97,17 +97,18 @@ function newClass(create, proto) {
 	return create
 }
 
-function updateVector(vec, to, f, d) {
-	var dx = to.x - vec.x,
-		dy = to.y - vec.y,
-		dz = to.z - vec.z,
+function updateVector(v, f, d) {
+	var to = v.to,
+		dx = to.x - v.x,
+		dy = to.y - v.y,
+		dz = to.z - v.z,
 		ds = dx*dx + dy*dy + dz*dz
 	f = f || 0.1
 	d = d || 0.0001
-	if (ds > f) {
-		vec.set(vec.x + dx*f, vec.y + dy*f, vec.z + dz*f)
-		return to
-	}
+	if (ds > f)
+		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
+	else
+		v.to = null
 }
 
 function checkComplete(list, callback) {
@@ -217,10 +218,14 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
+		/*
 		if (m.positionTo)
 			m.positionTo = updateVector(p, m.positionTo, 0.05)
 		if (m.rotationTo)
 			m.rotationTo = updateVector(p, m.rotationTo, 0.05)
+		*/
+		if (p.to) updateVector(p)
+		if (r.to) updateVector(r)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrain.check(p.x, p.z)
@@ -376,8 +381,8 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		ground.material.map.repeat.set(64, 64)
 		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
 		ground.castShadow = true
-		ground.receiveShadow = true
 		*/
+		ground.receiveShadow = true
 		console.log('ground ('+i+', '+j+') at ('+px+', '+py+') created')
 		//
 		scene.add(ground)
@@ -460,8 +465,8 @@ var Client = function(url) {
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
-			obj.mesh.positionTo = new THREE.Vector3().fromArray(data.position)
-			obj.mesh.rotationTo = new THREE.Euler().fromArray(data.rotation)
+			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
+			obj.mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
 			obj.mesh.velocity.fromArray(data.velocity)
 		}
 		else {
