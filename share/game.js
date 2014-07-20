@@ -217,10 +217,10 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		if (this.positionTo)
-			this.positionTo = updateVector(p, this.positionTo, 0.05)
-		if (this.rotationTo)
-			this.rotationTo = updateVector(p, this.rotationTo, 0.05)
+		if (m.positionTo)
+			m.positionTo = updateVector(p, m.positionTo, 0.05)
+		if (m.rotationTo)
+			m.rotationTo = updateVector(p, m.rotationTo, 0.05)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrain.check(p.x, p.z)
@@ -317,11 +317,11 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		ph = 32,
 		// image clip (in pixels)
 		iw = 32,
-		ih = 32
+		ih = 32,
+		// cached terrains
+		cached = { }
 	// current terrain
-	_t.current = null,
-	// cached terrains
-	cached = { },
+	_t.current = null
 	_t.check = function(x, y) {
 		var i = Math.floor(x / gw + 0.5),
 			j = Math.floor(y / gh + 0.5),
@@ -370,8 +370,8 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		//var material = new THREE.MeshBasicMaterial({ color:[0xff0000, 0x00ff00][Math.abs(i + j) % 2] })
 		//
 		var ground = new THREE.Mesh(geometry, material)
-		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2)
-			.setPosition(new THREE.Vector3(px, 0, py)))
+		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2))
+		ground.applyMatrix(new THREE.Matrix4().setPosition(new THREE.Vector3(px, 0, py)))
 		/*
 		ground.material.map.repeat.set(64, 64)
 		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
@@ -460,8 +460,8 @@ var Client = function(url) {
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
-			obj.positionTo = new THREE.Vector3().fromArray(data.position)
-			obj.rotationTo = new THREE.Euler().fromArray(data.rotation)
+			obj.mesh.positionTo = new THREE.Vector3().fromArray(data.position)
+			obj.mesh.rotationTo = new THREE.Euler().fromArray(data.rotation)
 			obj.mesh.velocity.fromArray(data.velocity)
 		}
 		else {
@@ -495,7 +495,7 @@ var Client = function(url) {
 					_t.socket.emit('sync', getSyncData())
 				}, 200)
 				$('body').append('<div '+
-					'style="position:absolute;left:0;top:0;margin:5px;background:rgba(255,255,255,0.5)">'+
+					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
 					'you are now hosting</div>')
 			}
 		})
