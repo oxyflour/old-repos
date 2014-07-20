@@ -97,17 +97,17 @@ function newClass(create, proto) {
 	return create
 }
 
-function updateVector(v, f, d) {
-	var dx = v.to.x - v.x,
-		dy = v.to.y - v.y,
-		dz = v.to.z - v.z,
+function updateVector(vec, to, f, d) {
+	var dx = to.x - vec.x,
+		dy = to.y - vec.y,
+		dz = to.z - vec.z,
 		ds = dx*dx + dy*dy + dz*dz
 	f = f || 0.1
 	d = d || 0.0001
-	if (ds > f)
-		v.set(v.x + dx*f, v.y + dy*f, v.z + dz*f)
-	else
-		v.to = undefined
+	if (ds > f) {
+		vec.set(vec.x + dx*f, vec.y + dy*f, vec.z + dz*f)
+		return to
+	}
 }
 
 function checkComplete(list, callback) {
@@ -124,7 +124,7 @@ function checkComplete(list, callback) {
 		if (process < 1)
 			setTimeout(check, 200)
 		else
-			callback()
+			callback(list)
 	}
 	check()
 }
@@ -136,11 +136,31 @@ function getReqsDict() {
 	}, { })
 }
 
+function getImageData(img, sx, sy, sw, sh, w, h) {
+	var cv = document.createElement('canvas')
+		dc = cv.getContext('2d')
+	sx = sx || 0
+	sy = sy || 0
+	sw = sw || img.width - sx
+	sh = sh || img.height - sy
+	cv.width  = w = w || sw
+	cv.height = h = h || sh
+	dc.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
+	return cv
+}
+
 var THREE = this.THREE || require('three'),
 	MD2CharacterComplex = THREE.MD2CharacterComplex || require('./MD2CharacterComplex.js')
 
 var Resource = function(data) {
-	this.Player = (function(conf) {
+	function newImage(src) {
+		var img = document.createElement('img')
+		img.src = src
+		img.style.display = 'none'
+		document.body.appendChild(img)
+		return img
+	}
+	function newMD2Char(conf) {
 		var model = new MD2CharacterComplex()
 		model.conf = conf
 		model.scale = 3
@@ -149,7 +169,10 @@ var Resource = function(data) {
 		}
 		model.loadParts(conf)
 		return model
-	})({
+	}
+	this.World = newImage('textures/terrain/China.png')
+	this.Grass = newImage('textures/terrain/grasslight-big.jpg')
+	this.Player = newMD2Char({
 		baseUrl: 'models/ogro/',
 		body: 'ogro-light.js',
 		skins: ('grok.jpg|ogrobase.png|arboshak.png|ctf_r.png|ctf_b.png|darkam.png|'+
@@ -194,8 +217,28 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05)
-		if (r.to) updateVector(r, 0.03)
+		if (this.positionTo)
+			this.positionTo = updateVector(p, this.positionTo, 0.05)
+		if (this.rotationTo)
+			this.rotationTo = updateVector(p, this.rotationTo, 0.05)
+		// walk on terrain
+		if (this.terrain) {
+			this.terrain.check(p.x, p.z)
+			var position = new THREE.Vector3(p.x, 10240, p.z)
+				direction = new THREE.Vector3(0, -1, 0),
+				raycast = new THREE.Raycaster(position, direction),
+				intersect = raycast.intersectObject(this.terrain.current)
+			this.terrainY = intersect.length ? intersect[0].point.y + this.initialY : p.y
+			//	
+			if (p.y < this.terrainY) {
+				p.y = this.terrainY
+				v.y = 0
+			}
+			else if (this.terrainY > p.yt) {
+				// add gravity
+				v.y -= 0.015 * dt
+			}
+		}
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -208,6 +251,7 @@ var Basic = (function(proto) {
 var Player = (function(proto) {
 	proto.sync = function(data) {
 		if (data) {
+			// restore skin color
 			if (this.skin != data.skin)
 				this.model.setSkin(this.skin = data.skin)
 		}
@@ -218,9 +262,9 @@ var Player = (function(proto) {
 	// run with control
 	var run = proto.run
 	proto.run = function(dt) {
+		var ctrl = this.model.controls
 		if (this.keys) {
-			var ks = this.keys,
-				ctrl = this.model.controls
+			var ks = this.keys
 			ctrl.moveForward  = ks.W || ks.UP
 			ctrl.moveBackward = ks.S || ks.DOWN
 			ctrl.moveLeft  = ks.A || ks.LEFT
@@ -228,8 +272,13 @@ var Player = (function(proto) {
 			ctrl.crouch = ks.ctrlKey
 			ctrl.jump = ks.SPACE
 		}
+		//
 		this.model.update(dt / 1000)
+		//
 		run.apply(this, arguments)
+		//
+		if (ctrl.jump && this.position.y == this.terrainY)
+			this.velocity.y = 5
 	}
 	// cerate model
 	var create = proto.create
@@ -248,10 +297,94 @@ var Player = (function(proto) {
 			data.model.setSkin(data.skin)
 			data.model.setWeapon(0)
 			data.mesh = data.model.root
+			// remember the initial y position (half of height)
+			data.initialY = data.mesh.position.y
 		}
 		create.call(this, data)
 	}, proto)
 })(new Basic())
+
+var Terrain = function(scene, heightMap, textureSrc) {
+	var _t = this,
+		texture = THREE.ImageUtils.loadTexture(textureSrc),
+		// max height
+		mh = 512,
+		// ground size (in pixels)
+		gw = 1024*2,
+		gh = 1024*2,
+		// ground points count
+		pw = 32,
+		ph = 32,
+		// image clip (in pixels)
+		iw = 32,
+		ih = 32
+	// current terrain
+	_t.current = null,
+	// cached terrains
+	cached = { },
+	_t.check = function(x, y) {
+		var i = Math.floor(x / gw + 0.5),
+			j = Math.floor(y / gh + 0.5),
+			k = i + ',' + j
+		if (_t.current !== cached[k]) {
+			_t.change(i, j)
+			_t.current = cached[k]
+		}
+	}
+	_t.change = function(i, j) {
+		//
+		for (var k in cached)
+			cached[k].visible = false
+		//
+		for (var m = i - 1; m <= i + 1; m ++) {
+			for (var n = j - 1; n <= j + 1; n ++) {
+				var k = m + ',' + n
+				if (!cached[k])
+					cached[k] = _t.create(m, n)
+				cached[k].visible = true
+			}
+		}
+	}
+	_t.create = function(i, j) {
+		var x = iw * i - iw / 2 + heightMap.width / 2,
+			y = ih * j - ih / 2 + heightMap.height / 2,
+			px = i * gw,
+			py = j * gh
+		// get height map
+		var canvas = getImageData(heightMap, x, y, iw+1, ih+1, pw+1, ph+1),
+			imdata = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+		//
+		var geometry = new THREE.PlaneGeometry(gw, gh, pw, ph)
+		geometry.dynamic = true
+		if (geometry.vertices.length*4 == imdata.length) {
+			ieach(geometry.vertices, function(i, v) {
+				v.z = imdata[i * 4] / 255 * mh
+			})
+		}
+		geometry.computeFaceNormals()
+		geometry.computeVertexNormals()
+		geometry.__dirtyVertices = true
+		geometry.__dirtyNormals = true
+		//
+		var material = new THREE.MeshPhongMaterial({ color:0xffffff, map:texture })
+		//var material = new THREE.MeshBasicMaterial({ color:[0xff0000, 0x00ff00][Math.abs(i + j) % 2] })
+		//
+		var ground = new THREE.Mesh(geometry, material)
+		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2)
+			.setPosition(new THREE.Vector3(px, 0, py)))
+		/*
+		ground.material.map.repeat.set(64, 64)
+		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
+		ground.castShadow = true
+		ground.receiveShadow = true
+		*/
+		console.log('ground ('+i+', '+j+') at ('+px+', '+py+') created')
+		//
+		scene.add(ground)
+		return ground
+	}
+	return _t
+}
 
 var Client = function(url) {
 	var _t = this
@@ -303,22 +436,6 @@ var Client = function(url) {
 	_t.controls = new THREE.OrbitControls(_t.camera, _t.renderer.domElement)
 	_t.controls.noKeys = true
 
-	function initWorld() {
-		// init ground only
-		var ground = new THREE.Mesh(
-			new THREE.PlaneGeometry(16000, 16000),
-			new THREE.MeshPhongMaterial({
-				color: 0xffffff,
-				map: THREE.ImageUtils.loadTexture("textures/terrain/grasslight-big.jpg")
-			})
-		)
-		ground.rotation.x = - Math.PI / 2
-		ground.material.map.repeat.set(64, 64)
-		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
-		ground.receiveShadow = true
-		_t.scene.add(ground)
-	}
-
 	_t.socket = null
 	_t.sobjs = { }
 	function getSyncData(objs, action) {
@@ -343,8 +460,8 @@ var Client = function(url) {
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id]
 		if (obj) {
-			obj.mesh.position.to = new THREE.Vector3().fromArray(data.position)
-			obj.mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
+			obj.positionTo = new THREE.Vector3().fromArray(data.position)
+			obj.rotationTo = new THREE.Euler().fromArray(data.rotation)
 			obj.mesh.velocity.fromArray(data.velocity)
 		}
 		else {
@@ -358,6 +475,7 @@ var Client = function(url) {
 			obj.sync(data.data)
 		return obj
 	}
+
 	_t.hosting = false
 	function connectToServer(url, join) {
 		_t.socket = io.connect(url)
@@ -372,9 +490,11 @@ var Client = function(url) {
 					obj.finished = !clients[obj.sid]
 			})
 			// start hosting
-			if (!_t.hosting) _t.hosting = setInterval(function() {
-				_t.socket.emit('sync', getSyncData())
-			}, 200)
+			if (!_t.hosting) {
+				_t.hosting = setInterval(function() {
+					_t.socket.emit('sync', getSyncData())
+				}, 200)
+			}
 		})
 		_t.socket.on('join', function(sid) {
 			newObject({
@@ -452,12 +572,13 @@ var Client = function(url) {
 	function newObject(data) {
 		//
 		data.scene = _t.scene
+		data.terrain = _t.terrain
 		//
 		var obj = null
 		if (data.cls == 'Player') {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
-			data.modelBase = res.Player
+			data.modelBase = _t.resource.Player
 			obj = new Player(data)
 			if (obj.sid == _t.socket.io.engine.id)
 				obj.mesh.add(_t.camera)
@@ -467,15 +588,14 @@ var Client = function(url) {
 		}
 		//
 		_t.objs.add(obj)
-		//
 		return obj
 	}
 
-	var res = new Resource()
-	initWorld()
-	checkComplete(res, function() {
+	checkComplete(new Resource(), function(res) {
+		_t.resource = res
+		_t.terrain = new Terrain(_t.scene, res.World, res.Grass.src)
 		initInput()
-		connectToServer(url, conf.watch === undefined)
+		connectToServer(url, conf.nojoin === undefined)
 	})
 
 	return _t
