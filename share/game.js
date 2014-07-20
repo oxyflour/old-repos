@@ -218,15 +218,9 @@ var Basic = (function(proto) {
 			v = m.velocity
 		p.add(v)
 		// simple interplotation
-		/*
-		if (m.positionTo)
-			m.positionTo = updateVector(p, m.positionTo, 0.05)
-		if (m.rotationTo)
-			m.rotationTo = updateVector(p, m.rotationTo, 0.05)
-		*/
 		if (p.to) updateVector(p)
 		if (r.to) updateVector(r)
-		if (v.to) updateVector(v)
+		if (v.to) updateVector(v, 0.01)
 		// walk on terrain
 		if (this.terrain) {
 			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
@@ -338,10 +332,10 @@ var Terrain = function(scene, heightMap, textureSrc) {
 	var _t = this,
 		texture = THREE.ImageUtils.loadTexture(textureSrc),
 		// max height
-		mh = 512,
+		mh = 1024,
 		// ground size (in pixels)
-		gw = 1024*2,
-		gh = 1024*2,
+		gw = 1024*4,
+		gh = 1024*4,
 		// ground points count
 		pw = 32,
 		ph = 32,
