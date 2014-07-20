@@ -494,6 +494,9 @@ var Client = function(url) {
 				_t.hosting = setInterval(function() {
 					_t.socket.emit('sync', getSyncData())
 				}, 200)
+				$('body').append('<div '+
+					'style="position:absolute;left:0;top:0;margin:5px;background:rgba(255,255,255,0.5)">'+
+					'you are now hosting</div>')
 			}
 		})
 		_t.socket.on('join', function(sid) {
