@@ -320,15 +320,8 @@ var Static = (function(proto) {
 		// sync position & rotation
 		var mesh = this.mesh
 		if (data) {
-			if (this.synced) {
-				mesh.position.to = new THREE.Vector3().fromArray(data.position)
-				mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
-			}
-			else {
-				mesh.position.fromArray(data.position)
-				mesh.rotation.fromArray(data.rotation)
-				this.synced = true
-			}
+			mesh.position.fromArray(data.position)
+			mesh.rotation.fromArray(data.rotation)
 		}
 		else return {
 			position: mesh.position.toArray(),
@@ -364,6 +357,23 @@ var Basic = (function(proto) {
 			if (this.camera)
 				this.terrain.checkVisible(p.x, p.z)
 		}
+	}
+	var sync = proto.sync
+	proto.sync = function(data) {
+		if (data) {
+			var mesh = this.mesh
+			if (this.synced) {
+				mesh.position.to = new THREE.Vector3().fromArray(data.position)
+				mesh.rotation.to = new THREE.Euler().fromArray(data.rotation)
+			}
+			else {
+				mesh.position.fromArray(data.position)
+				mesh.rotation.fromArray(data.rotation)
+				this.synced = true
+			}
+		}
+		else
+			return sync.call(this)
 	}
 	var create = proto.create
 	return newClass(function(data) {
