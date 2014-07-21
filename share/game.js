@@ -195,55 +195,129 @@ var Resource = function(data) {
 	})
 }
 
-var Basic = (function(proto) {
+var Terrain = function(scene, heightMap, textureSrc) {
+	var _t = this,
+		texture = THREE.ImageUtils.loadTexture(textureSrc),
+		// max height
+		mh = 1024,
+		// ground size (in pixels)
+		gw = 1024*4,
+		gh = 1024*4,
+		// ground points count
+		pw = 32,
+		ph = 32,
+		// image clip (in pixels)
+		iw = 32,
+		ih = 32,
+		// cached terrains
+		cached = { }
+	_t.getHeight = function(x, y, z) {
+		var i = Math.floor(x / gw + 0.5),
+			j = Math.floor(y / gh + 0.5),
+			k = i + ',' + j
+		var ground = cached[k] || (cached[k] = _t.create(i, j))
+		ground.visible = true
+		//
+		var origin = new THREE.Vector3(x, z, y)
+			direction = new THREE.Vector3(0, -1, 0),
+			raycast = new THREE.Raycaster(origin, direction),
+			intersect = raycast.intersectObject(ground)
+		return intersect.length ? intersect[0].point.y : 0
+	}
+	_t.checkVisible = function(x, y) {
+		var i = Math.floor(x / gw + 0.5),
+			j = Math.floor(y / gh + 0.5)
+		for (var k in cached)
+			cached[k].visible = false
+		for (var m = i - 1; m <= i + 1; m ++) {
+			for (var n = j - 1; n <= j + 1; n ++) {
+				var k = m + ',' + n
+				if (!cached[k])
+					cached[k] = _t.create(m, n)
+				cached[k].visible = true
+			}
+		}
+	}
+	_t.create = function(i, j) {
+		var x = iw * i - iw / 2 + heightMap.width / 2,
+			y = ih * j - ih / 2 + heightMap.height / 2,
+			px = i * gw,
+			py = j * gh
+		// get height map
+		var canvas = getImageData(heightMap, x, y, iw+1, ih+1, pw+1, ph+1),
+			imdata = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+		//
+		var geometry = new THREE.PlaneGeometry(gw, gh, pw, ph)
+		geometry.dynamic = true
+		if (geometry.vertices.length*4 == imdata.length) {
+			ieach(geometry.vertices, function(i, v) {
+				v.z = imdata[i * 4] / 255 * mh
+			})
+		}
+		geometry.computeFaceNormals()
+		geometry.computeVertexNormals()
+		geometry.__dirtyVertices = true
+		geometry.__dirtyNormals = true
+		//
+		var material = new THREE.MeshPhongMaterial({ color:0xffffff, map:texture })
+		//
+		var ground = new THREE.Mesh(geometry, material)
+		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2))
+		ground.position.set(px, 0, py)
+		/*
+		ground.material.map.repeat.set(64, 64)
+		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
+		ground.castShadow = true
+		*/
+		ground.receiveShadow = true
+		console.log('ground ('+i+', '+j+') at ('+px+', '+py+') created')
+		//
+		scene.add(ground)
+		return ground
+	}
+	return _t
+}
+
+var Static = (function(proto) {
 	return newClass(function(data) {
 		// extend data into object
 		extend(this, data)
 		// create a cube
 		if (!this.mesh) this.mesh = new THREE.Mesh(
 			new THREE.BoxGeometry(200, 200, 200),
-			new THREE.MeshBasicMaterial({ color:'white', wireframe: true, })
+			new THREE.MeshBasicMaterial({ color:'white', })
 		)
+		if (this.terrain) {
+			// get terrain base
+			if (!this.terrainBase) {
+				var m = this.mesh,
+					g = m.geometry
+				if (g) {
+					if (!g.boundingBox)
+						g.computeBoundingBox()
+					this.terrainBase = -g.boundingBox.min.y * m.scale.y
+				}
+				else
+					this.terrainBase = 0
+			}
+			// put it on the terrain
+			var p = this.mesh.position
+			p.y = this.terrain.getHeight(p.x, p.z, 1000) + this.terrainBase
+		}
 	}, proto)
 })({
 	init: function() {
-		// add velocity
-		this.mesh.velocity = new THREE.Vector3()
 		this.scene && this.scene.add(this.mesh)
 		console.log('object #' + this.id + ' created')
 	},
 	run: function(dt) {
-		// move!
-		var m = this.mesh,
-			p = m.position,
-			r = m.rotation,
-			v = m.velocity
-		p.add(v)
-		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.001, 0.05)
-		if (r.to) updateVector(r, 0.03)
-		// walk on terrain
-		if (this.terrain) {
-			this.terrainY = this.terrain.getHeight(p.x, p.z) + this.initialY
-			// keep object on the ground
-			if (p.y < this.terrainY) {
-				p.y = this.terrainY
-				v.y = 0
-			}
-			// add gravity if object is over the ground
-			else if (p.y > this.terrainY) {
-				v.y -= 0.012 * dt
-			}
-			// keep terrain visible if there is a camera with this object
-			if (this.camera)
-				this.terrain.checkVisible(p.x, p.z)
-		}
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
 		console.log('object #' + this.id + ' killed')
 	},
 	sync: function(data) {
+		// sync position & rotation
 		var mesh = this.mesh
 		if (data) {
 			if (this.synced) {
@@ -262,6 +336,42 @@ var Basic = (function(proto) {
 		}
 	}
 })
+
+var Basic = (function(proto) {
+	proto.run = function(dt) {
+		// move!
+		var m = this.mesh,
+			p = m.position,
+			r = m.rotation,
+			v = m.velocity
+		p.add(v)
+		// simple interplotation
+		if (p.to) updateVector(p, 0.05, 0.001, 0.05)
+		if (r.to) updateVector(r, 0.03)
+		// walk on terrain
+		if (this.terrain) {
+			this.terrainY = this.terrain.getHeight(p.x, p.z, p.y) + this.terrainBase
+			// keep object on the ground
+			if (p.y < this.terrainY) {
+				p.y = this.terrainY
+				v.y = 0
+			}
+			// add gravity if object is over the ground
+			else if (p.y > this.terrainY) {
+				v.y -= 0.012 * dt
+			}
+			// keep terrain visible if there is a camera with this object
+			if (this.camera)
+				this.terrain.checkVisible(p.x, p.z)
+		}
+	}
+	var create = proto.create
+	return newClass(function(data) {
+		create.call(this, data)
+		// add velocity
+		this.mesh.velocity = new THREE.Vector3()
+	}, proto)
+})(new Static())
 
 var Player = (function(proto) {
 	var sync = proto.sync
@@ -315,100 +425,18 @@ var Player = (function(proto) {
 				data.skin = Math.floor(Math.random() * model.conf.skins.length)
 			data.model.setSkin(data.skin)
 			data.model.setWeapon(0)
+			//
 			data.mesh = data.model.root
+			//
+			data.terrainBase = data.mesh.position.y
 		}
+		//
 		create.call(this, data)
-		// remember the initial y position (half of height)
-		this.initialY = this.mesh.position.y
 		// 
 		if (this.camera)
 			this.mesh.add(this.camera)
 	}, proto)
 })(new Basic())
-
-var Terrain = function(scene, heightMap, textureSrc) {
-	var _t = this,
-		texture = THREE.ImageUtils.loadTexture(textureSrc),
-		// max height
-		mh = 1024,
-		// ground size (in pixels)
-		gw = 1024*4,
-		gh = 1024*4,
-		// ground points count
-		pw = 32,
-		ph = 32,
-		// image clip (in pixels)
-		iw = 32,
-		ih = 32,
-		// cached terrains
-		cached = { }
-	_t.getHeight = function(x, y) {
-		var i = Math.floor(x / gw + 0.5),
-			j = Math.floor(y / gh + 0.5),
-			k = i + ',' + j
-		var ground = cached[k] || (cached[k] = _t.create(i, j))
-		ground.visible = true
-		//
-		var origin = new THREE.Vector3(x, 10240, y)
-			direction = new THREE.Vector3(0, -1, 0),
-			raycast = new THREE.Raycaster(origin, direction),
-			intersect = raycast.intersectObject(ground)
-		return intersect.length ? intersect[0].point.y : 0
-	}
-	_t.checkVisible = function(x, y) {
-		var i = Math.floor(x / gw + 0.5),
-			j = Math.floor(y / gh + 0.5)
-		for (var k in cached)
-			cached[k].visible = false
-		for (var m = i - 1; m <= i + 1; m ++) {
-			for (var n = j - 1; n <= j + 1; n ++) {
-				var k = m + ',' + n
-				if (!cached[k])
-					cached[k] = _t.create(m, n)
-				cached[k].visible = true
-			}
-		}
-	}
-	_t.create = function(i, j) {
-		var x = iw * i - iw / 2 + heightMap.width / 2,
-			y = ih * j - ih / 2 + heightMap.height / 2,
-			px = i * gw,
-			py = j * gh
-		// get height map
-		var canvas = getImageData(heightMap, x, y, iw+1, ih+1, pw+1, ph+1),
-			imdata = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
-		//
-		var geometry = new THREE.PlaneGeometry(gw, gh, pw, ph)
-		geometry.dynamic = true
-		if (geometry.vertices.length*4 == imdata.length) {
-			ieach(geometry.vertices, function(i, v) {
-				v.z = imdata[i * 4] / 255 * mh
-			})
-		}
-		geometry.computeFaceNormals()
-		geometry.computeVertexNormals()
-		geometry.__dirtyVertices = true
-		geometry.__dirtyNormals = true
-		//
-		var material = new THREE.MeshPhongMaterial({ color:0xffffff, map:texture })
-		//var material = new THREE.MeshBasicMaterial({ color:[0xff0000, 0x00ff00][Math.abs(i + j) % 2] })
-		//
-		var ground = new THREE.Mesh(geometry, material)
-		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2))
-		ground.applyMatrix(new THREE.Matrix4().setPosition(new THREE.Vector3(px, 0, py)))
-		/*
-		ground.material.map.repeat.set(64, 64)
-		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
-		ground.castShadow = true
-		*/
-		ground.receiveShadow = true
-		console.log('ground ('+i+', '+j+') at ('+px+', '+py+') created')
-		//
-		scene.add(ground)
-		return ground
-	}
-	return _t
-}
 
 var Client = function(url) {
 	var _t = this
@@ -469,7 +497,7 @@ var Client = function(url) {
 		data.objs = ieach(objs || _t.objs, function(i, obj, list) {
 			if (!obj || obj.finished) return
 			list.push({
-				data: obj.sync(),
+				data: obj.sync && obj.sync(),
 				cls: obj.cls,
 				id: obj.id,
 				sid: obj.sid,
@@ -479,7 +507,7 @@ var Client = function(url) {
 	}
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id] || (_t.sobjs[data.id] = newObject(data))
-		if (data.data)
+		if (data.data && obj.sync)
 			obj.sync(data.data)
 		return obj
 	}
@@ -605,6 +633,7 @@ var Client = function(url) {
 	checkComplete(new Resource(), function(res) {
 		_t.resource = res
 		_t.terrain = new Terrain(_t.scene, res.World, res.Grass.src)
+		_t.terrain.checkVisible(0, 0)
 		initInput()
 		connectToServer(url, conf.nojoin === undefined)
 	})
