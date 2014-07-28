@@ -343,7 +343,11 @@ var Basic = (function(proto) {
 		if (r.to) updateVector(r, 0.03)
 		// walk on terrain
 		if (this.terrain) {
-			this.terrainY = this.terrain.getHeight(p.x, p.z, p.y) + this.terrainBase
+			// test terrain height every 10 ticks
+			if (!(this.terrainTick ++ < 10)) {
+				this.terrainTick = 0
+				this.terrainY = this.terrain.getHeight(p.x, p.z, p.y) + this.terrainBase
+			}
 			// keep object on the ground
 			if (p.y < this.terrainY) {
 				p.y = this.terrainY
