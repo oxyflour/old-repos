@@ -453,12 +453,12 @@ var Client = function(url) {
 
 	var conf = getReqsDict()
 
-	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 4000)
+	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 6000)
 	_t.camera.position.set(0, 150, -800)
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
-	_t.scene.fog = new THREE.Fog(0xffffff, 1000, 4000)
+	_t.scene.fog = new THREE.Fog(0xffffff, 3000, 6000)
 	_t.scene.add(_t.camera)
 
 	_t.scene.add(new THREE.AmbientLight(0x222222))
