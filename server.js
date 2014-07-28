@@ -5,7 +5,7 @@ var express = require('express'),
 
 app.use('/share', express.static(__dirname+'/share'))
 	.use(express.static(__dirname+'/html'))
-srv.listen(80)
+srv.listen(18080)
 
 // start server
 new require('./share/game.js').Server(io)
