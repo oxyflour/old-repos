@@ -484,7 +484,10 @@ var Client = function(url) {
 	catch (e) {
 		_t.renderer = new THREE.CanvasRenderer()
 		//
-		_t.renderer.render = function() { }
+		_t.renderer.render = function(scene, camera) {
+			if (scene.autoUpdate === true) scene.updateMatrixWorld()
+			if (camera.parent === undefined) camera.updateMatrixWorld()
+		}
 	}
 	_t.renderer.gammaInput = true
 	_t.renderer.gammaOutput = true
