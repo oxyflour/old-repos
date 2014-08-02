@@ -148,7 +148,8 @@ function getImageData(img, sx, sy, sw, sh, w, h) {
 	sh = sh || img.height - sy
 	cv.width  = w = w || sw
 	cv.height = h = h || sh
-	dc.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
+	if (sx > 0 && sy > 0 && sw > 0 && sh > 0 && w > 0 && h > 0)
+		dc.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
 	return cv
 }
 
@@ -344,8 +345,8 @@ var Basic = (function(proto) {
 		// walk on terrain
 		if (this.terrain) {
 			// test terrain height every 10 ticks
-			if (!(this.terrainTick ++ < 10)) {
-				this.terrainTick = 0
+			if (!(this.terrainUpdateTick ++ < this.terrainUpdateInterval)) {
+				this.terrainUpdateTick = 0
 				this.terrainY = this.terrain.getHeight(p.x, p.z, p.y) + this.terrainBase
 			}
 			// keep object on the ground
@@ -381,6 +382,8 @@ var Basic = (function(proto) {
 	}
 	var create = proto.create
 	return newClass(function(data) {
+		this.terrainUpdateInterval = 10
+		//
 		create.call(this, data)
 		// add velocity
 		this.mesh.velocity = new THREE.Vector3()
@@ -637,6 +640,7 @@ var Client = function(url) {
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
 			data.modelBase = _t.resource.Player
+			data.terrainUpdateInterval = data.local ? 2 : 10
 			obj = new Player(data)
 		}
 		else {
