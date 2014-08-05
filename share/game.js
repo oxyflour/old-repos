@@ -327,11 +327,6 @@ var Static = (function(proto) {
 	return newClass(function(data) {
 		// extend data into object
 		extend(this, data)
-		// check if object is ready
-		this.check()
-	}, proto)
-})({
-	check: function() {
 		// create a cube
 		if (!this.mesh) this.mesh = new THREE.Mesh(
 			new THREE.BoxGeometry(200, 200, 200),
@@ -352,7 +347,8 @@ var Static = (function(proto) {
 		}
 		// simply call this.onready
 		this.onready && this.onready()
-	},
+	}, proto)
+})({
 	init: function() {
 		this.scene && this.scene.add(this.mesh)
 		console.log('object #' + this.id + ' created')
@@ -382,13 +378,6 @@ var Basic = (function(proto) {
 	//
 	proto.terrainUpdateInterval = 100
 	//
-	var check = proto.check
-	proto.check = function() {
-		//
-		check.apply(this, arguments)
-		// add velocity
-		this.mesh.velocity = new THREE.Vector3()
-	}
 	proto.run = function(dt) {
 		// move!
 		var m = this.mesh,
@@ -439,32 +428,14 @@ var Basic = (function(proto) {
 	}
 	var create = proto.create
 	return newClass(function(data) {
-		create.apply(this, arguments)
+		create.call(this, data)
+		// add velocity
+		this.mesh.velocity = new THREE.Vector3()
 	}, proto)
 })(new Static())
 
 var Player = (function(proto) {
-	var check = proto.check
-	proto.check = function() {
-		var _t = this
-		new ResLoader('models/ogro/', ResLoader.handleMd2Char, function(model) {
-			_t.modelBase = model
-			_t.model.scale = model.scale
-			_t.model.shareParts(model)
-			_t.model.enableShadows(true)
-			if (!_t.skin)
-				_t.skin = Math.floor(Math.random() * model.conf.skins.length)
-			_t.model.setSkin(_t.skin)
-			_t.model.setWeapon(0)
-			//
-			_t.mesh = _t.model.root
-			// 
-			if (_t.camera)
-				_t.mesh.add(_t.camera)
-
-			check.apply(_t, arguments)
-		})
-	}
+	// sync model skin
 	var sync = proto.sync
 	proto.sync = function(data) {
 		if (data) {
@@ -495,7 +466,7 @@ var Player = (function(proto) {
 		//
 		this.model.update(dt / 1000)
 		//
-		run.apply(this, arguments)
+		run.call(this, dt)
 		// you can jump if on the ground
 		if (ctrl.jump && this.mesh.position.y == this.terrainY)
 			this.mesh.velocity.y = 6
@@ -505,23 +476,26 @@ var Player = (function(proto) {
 	return newClass(function(data) {
 		this.model = new MD2CharacterComplex()
 		this.model.controls = { }
-
-		create.apply(this, arguments)
+		var _t = this
+		new ResLoader('models/ogro/', ResLoader.handleMd2Char, function(model) {
+			_t.model.scale = model.scale
+			_t.model.shareParts(model)
+			_t.model.enableShadows(true)
+			_t.model.setWeapon(0)
+			_t.mesh = _t.model.root
+			//
+			create.call(_t, data)
+			//
+			_t.skin = Math.floor(Math.random() * model.conf.skins.length)
+			_t.model.setSkin(_t.skin)
+			// 
+			if (_t.camera)
+				_t.mesh.add(_t.camera)
+		})
 	}, proto)
 })(new Basic())
 
 var W3Player = (function(proto) {
-	var check = proto.check
-	proto.check = function() {
-		var _t = this,
-			url = _t.modelUrl
-		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
-			_t.model = new THREE.W3Character(geometries)
-			_t.mesh = _t.model.root
-			_t.mesh.rotation.x = -Math.PI / 2
-			check.call(_t)
-		})
-	}
 	var run = proto.run
 	proto.run = function(dt) {
 		run.call(this, dt)
@@ -531,7 +505,15 @@ var W3Player = (function(proto) {
 	}
 	var create = proto.create
 	return newClass(function(data) {
-		create.apply(this, arguments)
+		var _t = this,
+			url = _t.modelUrl
+		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
+			_t.model = new THREE.W3Character(geometries)
+			_t.mesh = _t.model.root
+			_t.mesh.rotation.x = -Math.PI / 2
+			//
+			create.call(_t, data)
+		})
 	}, proto)
 })(new Basic())
 
@@ -589,7 +571,6 @@ var Client = function(url) {
 	_t.controls.noKeys = true
 
 	_t.socket = null
-	_t.sobjs = { }
 	function getSyncData(objs, action) {
 		var data = {
 			action: action
@@ -606,7 +587,9 @@ var Client = function(url) {
 		return data
 	}
 	function syncObject(data) {
-		var obj = _t.sobjs[data.id] || (_t.sobjs[data.id] = newObject(data))
+		var obj = _t.objs['#' + data.id]
+		if (!obj)
+			obj = _t.objs['#' + data.id] = newObject(data)
 		if (data.data && obj.ready)
 			obj.sync(data.data)
 		return obj
@@ -639,7 +622,7 @@ var Client = function(url) {
 			newObject({
 				cls: 'Player',
 				sid: sid,
-				id: Date.now()
+				id: Date.now()+':'+Math.random()
 			})
 		})
 		_t.socket.on('sync', function(data) {
@@ -648,22 +631,22 @@ var Client = function(url) {
 			}
 			else if (data.action == '-') {
 				data.objs.forEach(function(d) {
-					var obj = _t.sobjs[d.id]
+					var obj = _t.objs['#' + d.id]
 					if (obj) {
 						obj.finished = true
-						delete _t.sobjs[d.id]
+						delete _t.objs['#' + d.id]
 					}
 				})
 			}
 			else {
-				keach(_t.sobjs, function(id, obj) {
-					obj.finished = true
+				ieach(_t.objs, function(id, obj) {
+					if (obj)
+						obj.finished = true
 				})
-				_t.sobjs = ieach(data.objs, function(i, d, objs) {
+				ieach(data.objs, function(i, d, objs) {
 					var obj = syncObject(d)
 					obj.finished = false
-					objs[obj.id] = obj
-				}, { })
+				})
 			}
 		})
 		_t.socket.on('input', function(data) {
@@ -736,6 +719,11 @@ var Client = function(url) {
 		else {
 			obj = new Basic(data)
 		}
+
+		var id = '#' + obj.id
+		if (_t.objs[id])
+			_t.objs[id].finished = true
+		_t.objs[id] = obj
 		return obj
 	}
 	this.newObject = newObject
