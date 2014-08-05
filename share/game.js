@@ -54,7 +54,7 @@ function newAnimateList() {
 		t.init && t.init()
 		_t[!running && unused.length ? unused.pop() : _t.length] = t
 	}
-	_t.run = function(dt) {
+	_t.run = function(fn, dt) {
 		running = true
 		for (var i = 0, n = _t.length, t = null; i < n; i ++) {
 			if (t = _t[i]) {
@@ -63,8 +63,8 @@ function newAnimateList() {
 					_t[i] = undefined
 					unused.push(i)
 				}
-				else if (!t.disabled)
-					t.run(dt)
+				else if (!t.disabled && t[fn])
+					t[fn](dt)
 			}
 		}
 		running = false
@@ -153,31 +153,54 @@ function getImageData(img, sx, sy, sw, sh, w, h) {
 	return cv
 }
 
+function reverseAnimation(anim) {
+	var rev = JSON.parse(JSON.stringify(anim))
+
+	var length = rev.length
+	rev.hierarchy.forEach(function(h) {
+		h.keys = h.keys.reverse()
+		h.keys.forEach(function(k, i) {
+			k.time = length - k.time
+		})
+	})
+
+	return rev
+}
+
 var THREE = this.THREE || require('three'),
 	MD2CharacterComplex = THREE.MD2CharacterComplex || require('./MD2CharacterComplex.js')
 
-var Resource = function(data) {
-	function newImage(src) {
-		var img = document.createElement('img')
-		img.src = src
-		img.style.display = 'none'
-		document.body.appendChild(img)
-		return img
+var ResLoader = function(url, handle, callback) {
+	var cached = ResLoader.cached || (ResLoader.cached = { })
+
+	function loaded(data) {
+		// Note: this function might be called more than once
+		// thus we have to check before save data to cache
+		if (!cached[url])
+			cached[url] = data
+		callback(cached[url])
 	}
-	function newMD2Char(conf) {
-		var model = new MD2CharacterComplex()
-		model.conf = conf
-		model.scale = 3
-		model.onLoadComplete = function() {
-			this.complete = true
-		}
-		model.loadParts(conf)
-		return model
+
+	if (cached[url])
+		loaded(cached[url])
+	else if (handle)
+		handle(url, loaded)
+}
+ResLoader.handleImg = function(url, callback) {
+	var img = document.createElement('img')
+	img.src = url
+	function check() {
+		if (img.complete)
+			callback(img)
+		else
+			setTimeout(check, 200)
 	}
-	this.World = newImage('textures/terrain/China.png')
-	this.Grass = newImage('textures/terrain/grasslight-big.jpg')
-	this.Player = newMD2Char({
-		baseUrl: 'models/ogro/',
+	check()
+}
+ResLoader.handleMd2Char = function(url, callback) {
+	var model = new MD2CharacterComplex()
+	model.conf = {
+		baseUrl: url,
 		body: 'ogro-light.js',
 		skins: ('grok.jpg|ogrobase.png|arboshak.png|ctf_r.png|ctf_b.png|darkam.png|'+
 			'freedom.png|gordogh.png|igdosh.png|khorne.png|nabogro.png|sharokh.png').split('|'),
@@ -193,6 +216,29 @@ var Resource = function(data) {
 		},
 		walkSpeed: 350,
 		crouchSpeed: 175
+	}
+	model.scale = 3
+	model.onLoadComplete = function() {
+		callback(model)
+	}
+	model.loadParts(model.conf)
+}
+ResLoader.handleW3Char = function(url, callback) {
+	THREE.LoadWar3Mdl(url, function(geometries) {
+		geometries.forEach(function(geo) {
+			// update texture path
+			geo.extra.TexturePath = geo.extra.TexturePath ?
+				'models/mdl/' + geo.extra.TexturePath.split('\\').pop().replace(/\.\w+$/g, '.png') : ''
+			// add reverse animation
+			for (var i = 0, a; a = geo.animations[i]; i ++)
+				if (a.name.toLowerCase().indexOf('walk') >= 0) break
+			if (a) {
+				var r = reverseAnimation(a)
+				r.name = 'walk reverse'
+				geo.animations.push(r)
+			}
+		})
+		callback(geometries)
 	})
 }
 
@@ -257,8 +303,6 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		}
 		geometry.computeFaceNormals()
 		geometry.computeVertexNormals()
-		geometry.__dirtyVertices = true
-		geometry.__dirtyNormals = true
 		//
 		var material = new THREE.MeshPhongMaterial({ color:0xffffff, map:texture })
 		//
@@ -283,6 +327,11 @@ var Static = (function(proto) {
 	return newClass(function(data) {
 		// extend data into object
 		extend(this, data)
+		// check if object is ready
+		this.check()
+	}, proto)
+})({
+	check: function() {
 		// create a cube
 		if (!this.mesh) this.mesh = new THREE.Mesh(
 			new THREE.BoxGeometry(200, 200, 200),
@@ -290,28 +339,26 @@ var Static = (function(proto) {
 		)
 		if (this.terrain) {
 			// get terrain base
-			if (!this.terrainBase) {
-				var m = this.mesh,
-					g = m.geometry
-				if (g) {
-					if (!g.boundingBox)
-						g.computeBoundingBox()
-					this.terrainBase = -g.boundingBox.min.y * m.scale.y
-				}
-				else
-					this.terrainBase = 0
+			if (!this.distToTop || !this.distToBottom) {
+				var m = this.mesh
+					b = new THREE.BoundingBoxHelper(m)
+				b.update()
+				this.distToTop = b.box.max.y -  m.position.y
+				this.distToBottom = m.position.y - b.box.min.y
 			}
 			// put it on the terrain
 			var p = this.mesh.position
-			p.y = this.terrain.getHeight(p.x, p.z, 1000) + this.terrainBase
+			p.y = this.terrain.getHeight(p.x, p.z, 1000) + this.distToBottom
 		}
-	}, proto)
-})({
+		// simply call this.onready
+		this.onready && this.onready()
+	},
 	init: function() {
 		this.scene && this.scene.add(this.mesh)
 		console.log('object #' + this.id + ' created')
 	},
 	run: function(dt) {
+		//
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -332,6 +379,16 @@ var Static = (function(proto) {
 })
 
 var Basic = (function(proto) {
+	//
+	proto.terrainUpdateInterval = 100
+	//
+	var check = proto.check
+	proto.check = function() {
+		//
+		check.apply(this, arguments)
+		// add velocity
+		this.mesh.velocity = new THREE.Vector3()
+	}
 	proto.run = function(dt) {
 		// move!
 		var m = this.mesh,
@@ -345,9 +402,9 @@ var Basic = (function(proto) {
 		// walk on terrain
 		if (this.terrain) {
 			// test terrain height every 10 ticks
-			if (!(this.terrainUpdateTick ++ < this.terrainUpdateInterval)) {
+			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
 				this.terrainUpdateTick = 0
-				this.terrainY = this.terrain.getHeight(p.x, p.z, p.y) + this.terrainBase
+				this.terrainY = this.terrain.getHeight(p.x, p.z, p.y + this.distToTop) + this.distToBottom
 			}
 			// keep object on the ground
 			if (p.y < this.terrainY) {
@@ -382,15 +439,32 @@ var Basic = (function(proto) {
 	}
 	var create = proto.create
 	return newClass(function(data) {
-		this.terrainUpdateInterval = 10
-		//
-		create.call(this, data)
-		// add velocity
-		this.mesh.velocity = new THREE.Vector3()
+		create.apply(this, arguments)
 	}, proto)
 })(new Static())
 
 var Player = (function(proto) {
+	var check = proto.check
+	proto.check = function() {
+		var _t = this
+		new ResLoader('models/ogro/', ResLoader.handleMd2Char, function(model) {
+			_t.modelBase = model
+			_t.model.scale = model.scale
+			_t.model.shareParts(model)
+			_t.model.enableShadows(true)
+			if (!_t.skin)
+				_t.skin = Math.floor(Math.random() * model.conf.skins.length)
+			_t.model.setSkin(_t.skin)
+			_t.model.setWeapon(0)
+			//
+			_t.mesh = _t.model.root
+			// 
+			if (_t.camera)
+				_t.mesh.add(_t.camera)
+
+			check.apply(_t, arguments)
+		})
+	}
 	var sync = proto.sync
 	proto.sync = function(data) {
 		if (data) {
@@ -429,29 +503,35 @@ var Player = (function(proto) {
 	// cerate model
 	var create = proto.create
 	return newClass(function(data) {
-		//
-		data.model = new MD2CharacterComplex()
-		data.model.controls = { }
-		//
-		if (data.modelBase) {
-			var model = data.modelBase
-			data.model.scale = model.scale
-			data.model.shareParts(model)
-			data.model.enableShadows(true)
-			if (!data.skin)
-				data.skin = Math.floor(Math.random() * model.conf.skins.length)
-			data.model.setSkin(data.skin)
-			data.model.setWeapon(0)
-			//
-			data.mesh = data.model.root
-			//
-			data.terrainBase = data.mesh.position.y
-		}
-		//
-		create.call(this, data)
-		// 
-		if (this.camera)
-			this.mesh.add(this.camera)
+		this.model = new MD2CharacterComplex()
+		this.model.controls = { }
+
+		create.apply(this, arguments)
+	}, proto)
+})(new Basic())
+
+var W3Player = (function(proto) {
+	var check = proto.check
+	proto.check = function() {
+		var _t = this,
+			url = _t.modelUrl
+		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
+			_t.model = new THREE.W3Character(geometries)
+			_t.mesh = _t.model.root
+			_t.mesh.rotation.x = -Math.PI / 2
+			check.call(_t)
+		})
+	}
+	var run = proto.run
+	proto.run = function(dt) {
+		run.call(this, dt)
+	}
+	proto.beforeRender = function(dt) {
+		this.model.beforeRender(dt)
+	}
+	var create = proto.create
+	return newClass(function(data) {
+		create.apply(this, arguments)
 	}, proto)
 })(new Basic())
 
@@ -527,7 +607,7 @@ var Client = function(url) {
 	}
 	function syncObject(data) {
 		var obj = _t.sobjs[data.id] || (_t.sobjs[data.id] = newObject(data))
-		if (data.data && obj.sync)
+		if (data.data && obj.ready)
 			obj.sync(data.data)
 		return obj
 	}
@@ -625,7 +705,10 @@ var Client = function(url) {
 				_t.socket.emit('input', localInputs)
 			_t.inputs.length = 0
 		}
-		_t.objs.run(dt)
+		_t.objs.run('run', dt)
+	}
+	_t.beforeRender = function(dt) {
+		_t.objs.run('beforeRender', dt)
 	}
 
 	function newObject(data) {
@@ -633,28 +716,35 @@ var Client = function(url) {
 		data.scene = _t.scene
 		data.terrain = _t.terrain
 		data.local = data.sid == _t.socket.io.engine.id
+		// add object to queue if all resource loaded
+		data.onready = function() {
+			this.ready = true
+			_t.objs.add(this)
+		}
 		//
 		var obj = null
 		if (data.cls == 'Player') {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
-			data.modelBase = _t.resource.Player
-			data.terrainUpdateInterval = data.local ? 2 : 10
+			data.terrainUpdateInterval = data.local ? 20 : 100
 			obj = new Player(data)
+		}
+		else if (data.cls == 'W3Player') {
+			obj = new W3Player(data)
 		}
 		else {
 			obj = new Basic(data)
 		}
-		//
-		_t.objs.add(obj)
 		return obj
 	}
+	this.newObject = newObject
 
-	checkComplete(new Resource(), function(res) {
-		_t.resource = res
-		_t.terrain = new Terrain(_t.scene, res.World, res.Grass.src)
+	// load the height map
+	new ResLoader('textures/terrain/China.png', ResLoader.handleImg, function(heightMap) {
+		_t.terrain = new Terrain(_t.scene, heightMap, 'textures/terrain/grasslight-big.jpg')
 		_t.terrain.checkVisible(0, 0)
+
 		initInput()
 		connectToServer(url, conf.nojoin === undefined)
 	})

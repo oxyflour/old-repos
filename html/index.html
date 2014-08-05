@@ -12,9 +12,10 @@
 <body>
 <script src="http://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
 <script src="socket.io/socket.io.js"></script>
-<script src="js/three.min.js"></script>
+<script src="js/three.js"></script>
 <script src="js/controls/OrbitControls.js"></script>
 <script src="share/MD2CharacterComplex.js"></script>
+<script src="share/War3MdlLoader.js"></script>
 <script src="share/game.js"></script>
 <script>
 
@@ -28,10 +29,17 @@ $(window).bind('resize', function(e) {
 	game.renderer.setSize(window.innerWidth, window.innerHeight)
 }).trigger('resize')
 
+if (!window.requestAnimationFrame) {
+	requestAnimationFrame = function(fn) {
+		setTimeout(fn, 30)
+	}
+}
 function render() {
 	requestAnimationFrame(render)
 	var dt = clock.getDelta()
+	THREE.AnimationHandler.update(dt)
 	game.controls.update(dt)
+	game.beforeRender(dt)
 	game.renderer.render(game.scene, game.camera)
 }
 render()
