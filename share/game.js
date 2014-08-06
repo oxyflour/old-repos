@@ -253,35 +253,32 @@ ResLoader.handleW3Char = function(url, callback) {
 			geo.extra.TexturePath = geo.extra.TexturePath ?
 				'models/mdl/' + geo.extra.TexturePath.split('\\').pop().replace(/\.\w+$/g, '.png') : ''
 			// update animation names
-			// walk, walk-back, attack, stand
-			var anims = { }
-			for (var i = 0, a; a = geo.animations[i]; i ++) {
-				var name = a.name.toLowerCase()
-				if (name == 'walk')
-					anims.walk = a
-				else if (name.indexOf('walk') >= 0)
-					anims.walk2 = a
-				else if (name.indexOf('attack') >= 0)
-					anims.attack = a
-				else if (name.indexOf('stand') >= 0)
-					anims.stand = a
+			var animGroup = geo.animGroup = {
+				walk: [ ],
+				attack: [ ],
+				stand: [ ],
 			}
-			// we have to rescale reimu's walking animation
-			if (fname == 'hakurei reimu') {
-				anims.walk = scaleAnimation(anims.walk, 0.4)
-				geo.animations.push(anims.walk)
+			for (var i = 0, a; a = geo.animations[i]; i ++) {
+				var name = a.name.toLowerCase(),
+					list = null
+				if (name.indexOf('walk') >= 0)
+					list = animGroup.walk
+				else if (name.indexOf('attack') >= 0)
+					list = animGroup.attack
+				else if (name.indexOf('stand') >= 0 && name.indexOf('ready') < 0)
+					list = animGroup.stand
+				if (list) {
+					list.push(a.name)
+					list[a.name] = i
+				}
 			}
 			// add reverse walking animation
-			if (anims.walk = anims.walk || anims.walk2) {
-				anims.walk.name = 'walk'
-				var r = reverseAnimation(anims.walk)
-				r.name = 'walk-back'
+			if (animGroup.walk.length) {
+				var i = animGroup.walk[animGroup.walk[0]]
+					r = reverseAnimation(geo.animations[i])
+				r.name = 'bwalk'
 				geo.animations.push(r)
 			}
-			if (anims.attack)
-				anims.attack.name = 'attack'
-			if (anims.stand)
-				anims.stand.name = 'stand'
 		})
 		callback(geometries)
 	})
@@ -581,6 +578,18 @@ var Player = (function(proto) {
 
 var W3Player = (function(proto) {
 	proto.dataSyncInterval = 200
+	// sync model skin
+	var sync = proto.sync
+	proto.sync = function(data) {
+		if (data) {
+			sync.call(this, data)
+		}
+		else {
+			data = sync.call(this)
+			data.name = this.name
+			return data
+		}
+	}
 	//
 	var run = proto.run
 	proto.run = function(dt) {
@@ -597,27 +606,31 @@ var W3Player = (function(proto) {
 		}
 		//
 		run.call(this, dt)
-		//
-		if (this.speed > 0.01)
-			this.model.playAnimation('walk')
-		else if (this.speed < -0.01)
-			this.model.playAnimation('walk-back')
-		else
-			this.model.playAnimation('stand')
 	}
 	proto.beforeRender = function(dt) {
 		this.model.beforeRender(dt)
+		//
+		if (this.controls.attack)
+			this.model.playAnimation(this.anims.attack)
+		else if (this.speed > 0.01)
+			this.model.playAnimation(this.anims.walk)
+		else if (this.speed < -0.01)
+			this.model.playAnimation('bwalk')
+		else
+			this.model.playAnimation(this.anims.stand)
 	}
 	var create = proto.create
 	return newClass(function(data) {
 		var _t = this,
-			url = data.modelUrl || 'models/mdl/cirno.txt'
+			url = 'models/mdl/'+(data.name || 'hakurei reimu')+'.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
 			_t.model = new THREE.W3Character(geometries)
+			_t.anims = geometries[0] ? geometries[0].animGroup : { }
+			console.log(_t.anims)
 			_t.mesh = _t.model.root
 			_t.mesh.children.forEach(function(mesh) {
 				mesh.castShadow = true
-				mesh.receiveShadow = true
+				//mesh.receiveShadow = true
 			})
 			//
 			create.call(_t, data)
@@ -636,12 +649,12 @@ var Client = function(url) {
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
-	_t.scene.fog = new THREE.Fog(0xffffff, 3000, 6000)
+	_t.scene.fog = new THREE.Fog('rgb(172,202,247)', 3000, 6000)
 	_t.scene.add(_t.camera)
 
-	_t.scene.add(new THREE.AmbientLight(0xaaaaaa))
+	_t.scene.add(new THREE.AmbientLight(0xffffff))
 
-	var light = new THREE.DirectionalLight(0xffffff, 2.25)
+	var light = new THREE.DirectionalLight(0x888888, 2.25)
 	light.position.set(200, 500, 450)
 	light.castShadow = conf.noshadow === undefined
 	light.shadowMapWidth = 1024
@@ -699,13 +712,12 @@ var Client = function(url) {
 		data.action = objs ? 'sync' : 'sync-all'
 		data.objs = ieach(objs || _t.objects, function(i, obj, list) {
 			if (!obj || !obj.id || obj.finished) return
-			list.push({
-				data: obj.sync && obj.sync(),
-				finished: obj.finished,
-				cls: obj.cls,
-				id: obj.id,
-				sid: obj.sid,
-			})
+			var data = obj.sync()
+			data.finished = obj.finished
+			data.cls = obj.cls
+			data.id = obj.id
+			data.sid = obj.sid
+			list.push(data)
 		}, [])
 		return data
 	}
@@ -713,8 +725,8 @@ var Client = function(url) {
 	function syncObject(data) {
 		var obj = getObject(data)
 		obj.finished = data.finished
-		if (data.data && obj.ready)
-			obj.sync(data.data)
+		if (obj.ready)
+			obj.sync(data)
 		return obj
 	}
 
@@ -741,11 +753,12 @@ var Client = function(url) {
 					'you are now hosting</div>')
 			}
 		})
-		_t.socket.on('join', function(sid) {
+		_t.socket.on('join', function(data) {
 			getObject({
+				id: guid(),
+				sid: data.sid,
 				cls: 'W3Player',
-				sid: sid,
-				id: guid()
+				name: data.name,
 			})
 		})
 		_t.socket.on('event', function(data) {
@@ -767,7 +780,7 @@ var Client = function(url) {
 		})
 
 		if (join)
-			_t.socket.emit('join')
+			_t.socket.emit('join', conf.name)
 	}
 
 	function initInput() {
@@ -898,9 +911,11 @@ var Server = function(io) {
 				socket.broadcast.emit('event', data)
 		})
 
-		socket.on('join', function() {
-			if (host)
-				host.emit('join', sid)
+		socket.on('join', function(name) {
+			if (host) host.emit('join', {
+				sid: sid,
+				name: name
+			})
 		})
 
 		socket.on('input', function(data) {
