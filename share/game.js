@@ -256,6 +256,7 @@ ResLoader.handleW3Char = function(url, callback) {
 			var animGroup = geo.animGroup = {
 				walk: [ ],
 				attack: [ ],
+				spell: [ ],
 				stand: [ ],
 			}
 			for (var i = 0, a; a = geo.animations[i]; i ++) {
@@ -265,6 +266,8 @@ ResLoader.handleW3Char = function(url, callback) {
 					list = animGroup.walk
 				else if (name.indexOf('attack') >= 0)
 					list = animGroup.attack
+				else if (name.indexOf('spell') >= 0)
+					list = animGroup.spell
 				else if (name.indexOf('stand') >= 0 && name.indexOf('ready') < 0)
 					list = animGroup.stand
 				if (list) {
@@ -595,7 +598,7 @@ var W3Player = (function(proto) {
 	proto.run = function(dt) {
 		if (this.keys) {
 			var ks = this.keys,
-				ctrl = this.controls || (this.controls = { })
+				ctrl = this.controls
 			ctrl.moveForward  = ks.W || ks.UP
 			ctrl.moveBackward = ks.S || ks.DOWN
 			ctrl.moveLeft  = ks.A || ks.LEFT
@@ -603,6 +606,7 @@ var W3Player = (function(proto) {
 			ctrl.crouch = ks.ctrlKey
 			ctrl.jump = ks.SPACE || ks.X
 			ctrl.attack = ks.Z
+			ctrl.spell = ks.C
 		}
 		//
 		run.call(this, dt)
@@ -610,7 +614,10 @@ var W3Player = (function(proto) {
 	proto.beforeRender = function(dt) {
 		this.model.beforeRender(dt)
 		//
-		if (this.controls.attack)
+		var ctrl = this.controls
+		if (ctrl.spell && this.anims.spell.length)
+			this.model.playAnimation(this.anims.spell)
+		else if (ctrl.attack)
 			this.model.playAnimation(this.anims.attack)
 		else if (this.speed > 0.01)
 			this.model.playAnimation(this.anims.walk)
@@ -625,13 +632,13 @@ var W3Player = (function(proto) {
 			url = 'models/mdl/'+(data.name || 'hakurei reimu')+'.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
 			_t.model = new THREE.W3Character(geometries)
-			_t.anims = geometries[0] ? geometries[0].animGroup : { }
-			console.log(_t.anims)
 			_t.mesh = _t.model.root
 			_t.mesh.children.forEach(function(mesh) {
 				mesh.castShadow = true
 				//mesh.receiveShadow = true
 			})
+			_t.anims = geometries[0] ? geometries[0].animGroup : { }
+			_t.controls = { }
 			//
 			create.call(_t, data)
 		})
