@@ -247,21 +247,41 @@ ResLoader.handleMd2Char = function(url, callback) {
 }
 ResLoader.handleW3Char = function(url, callback) {
 	THREE.LoadWar3Mdl(url, function(geometries) {
+		var fname = url.split('/').pop().replace(/\.\w+$/, '').toLowerCase()
 		geometries.forEach(function(geo) {
 			// update texture path
 			geo.extra.TexturePath = geo.extra.TexturePath ?
 				'models/mdl/' + geo.extra.TexturePath.split('\\').pop().replace(/\.\w+$/g, '.png') : ''
-			// add reverse animation
-			for (var i = 0, a; a = geo.animations[i]; i ++)
-				if (a.name.toLowerCase().indexOf('walk') >= 0) break
-			if (a) {
-				var s = scaleAnimation(a, 0.4)
-				s.name = 'player-walk'
-				geo.animations.push(s)
-				var r = reverseAnimation(s)
-				r.name = 'player-walk-back'
+			// update animation names
+			// walk, walk-back, attack, stand
+			var anims = { }
+			for (var i = 0, a; a = geo.animations[i]; i ++) {
+				var name = a.name.toLowerCase()
+				if (name == 'walk')
+					anims.walk = a
+				else if (name.indexOf('walk') >= 0)
+					anims.walk2 = a
+				else if (name.indexOf('attack') >= 0)
+					anims.attack = a
+				else if (name.indexOf('stand') >= 0)
+					anims.stand = a
+			}
+			// we have to rescale reimu's walking animation
+			if (fname == 'hakurei reimu') {
+				anims.walk = scaleAnimation(anims.walk, 0.4)
+				geo.animations.push(anims.walk)
+			}
+			// add reverse walking animation
+			if (anims.walk = anims.walk || anims.walk2) {
+				anims.walk.name = 'walk'
+				var r = reverseAnimation(anims.walk)
+				r.name = 'walk-back'
 				geo.animations.push(r)
 			}
+			if (anims.attack)
+				anims.attack.name = 'attack'
+			if (anims.stand)
+				anims.stand.name = 'stand'
 		})
 		callback(geometries)
 	})
@@ -579,11 +599,11 @@ var W3Player = (function(proto) {
 		run.call(this, dt)
 		//
 		if (this.speed > 0.01)
-			this.model.playAnimation('player-walk')
+			this.model.playAnimation('walk')
 		else if (this.speed < -0.01)
-			this.model.playAnimation('player-walk-back')
+			this.model.playAnimation('walk-back')
 		else
-			this.model.playAnimation('Stand')
+			this.model.playAnimation('stand')
 	}
 	proto.beforeRender = function(dt) {
 		this.model.beforeRender(dt)
@@ -591,9 +611,8 @@ var W3Player = (function(proto) {
 	var create = proto.create
 	return newClass(function(data) {
 		var _t = this,
-			url = data.modelUrl || 'models/mdl/hakurei reimu.txt'
+			url = data.modelUrl || 'models/mdl/cirno.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
-			_t.name = url.split('/').pop().replace(/\.\w+$/, '').toLowerCase()
 			_t.model = new THREE.W3Character(geometries)
 			_t.mesh = _t.model.root
 			_t.mesh.children.forEach(function(mesh) {
