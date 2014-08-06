@@ -1,3 +1,10 @@
+function guid() {
+	// see http://stackoverflow.com/questions/105034/how-to-create-a-guid-uuid-in-javascript
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+	    var r = Math.random()*16|0, v = c == 'x' ? r : (r&0x3|0x8);
+	    return v.toString(16);
+	})
+}
 function retself(x) {
 	return x;
 }
@@ -343,7 +350,7 @@ var Static = (function(proto) {
 			}
 			// put it on the terrain
 			var p = this.mesh.position
-			p.y = this.terrain.getHeight(p.x, p.z, 1000) + this.distToBottom
+			p.y = this.terrain.getHeight(p.x, p.z, 5000) + this.distToBottom
 		}
 		// simply call this.onready
 		this.onready && this.onready()
@@ -377,6 +384,7 @@ var Static = (function(proto) {
 var Basic = (function(proto) {
 	//
 	proto.terrainUpdateInterval = 100
+	proto.dataSyncInterval = 2000
 	//
 	proto.run = function(dt) {
 		// move!
@@ -408,6 +416,13 @@ var Basic = (function(proto) {
 			if (this.camera)
 				this.terrain.checkVisible(p.x, p.z)
 		}
+		//
+		if (this.syncs) {
+			if (!((this.dataSyncTick += dt) < this.dataSyncInterval)) {
+				this.dataSyncTick = 0
+				this.syncs.push(this)
+			}
+		}
 	}
 	var sync = proto.sync
 	proto.sync = function(data) {
@@ -435,6 +450,7 @@ var Basic = (function(proto) {
 })(new Static())
 
 var Player = (function(proto) {
+	proto.dataSyncInterval = 200
 	// sync model skin
 	var sync = proto.sync
 	proto.sync = function(data) {
@@ -496,8 +512,10 @@ var Player = (function(proto) {
 })(new Basic())
 
 var W3Player = (function(proto) {
+	proto.dataSyncInterval = 200
 	var run = proto.run
 	proto.run = function(dt) {
+		//
 		run.call(this, dt)
 	}
 	proto.beforeRender = function(dt) {
@@ -506,11 +524,10 @@ var W3Player = (function(proto) {
 	var create = proto.create
 	return newClass(function(data) {
 		var _t = this,
-			url = _t.modelUrl
+			url = data.modelUrl
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
 			_t.model = new THREE.W3Character(geometries)
 			_t.mesh = _t.model.root
-			_t.mesh.rotation.x = -Math.PI / 2
 			//
 			create.call(_t, data)
 		})
@@ -570,13 +587,26 @@ var Client = function(url) {
 	_t.controls = new THREE.OrbitControls(_t.camera, _t.renderer.domElement)
 	_t.controls.noKeys = true
 
+	// socket used to communicate with server
 	_t.socket = null
-	function getSyncData(objs, action) {
-		var data = {
-			action: action
-		}
-		data.objs = ieach(objs || _t.objs, function(i, obj, list) {
-			if (!obj || obj.finished) return
+	// if this client is hosting the game
+	_t.hosting = false
+	// input events will be pushed in this array, then emited to server
+	_t.inputs = [ ]
+	// objects can push themselves into this array, then their sync data will be emitted (if this client is hosting)
+	_t.syncs = [ ]
+	// objects array
+	_t.objects = newAnimateList()
+	// objects dictionary (obj.id as key)
+	_t.objIndex = { }
+	// local & remote key states (the dictionary key is sid)
+	_t.keys = { }
+
+	function getSyncData(objs) {
+		var data = { }
+		data.action = objs ? 'sync' : 'sync-all'
+		data.objs = ieach(objs || _t.objects, function(i, obj, list) {
+			if (!obj || !obj.id || obj.finished) return
 			list.push({
 				data: obj.sync && obj.sync(),
 				cls: obj.cls,
@@ -586,16 +616,14 @@ var Client = function(url) {
 		}, [])
 		return data
 	}
+
 	function syncObject(data) {
-		var obj = _t.objs['#' + data.id]
-		if (!obj)
-			obj = _t.objs['#' + data.id] = newObject(data)
+		var obj = getObject(data)
 		if (data.data && obj.ready)
 			obj.sync(data.data)
 		return obj
 	}
 
-	_t.hosting = false
 	function connectToServer(url, join) {
 		_t.socket = io.connect(url)
 		//
@@ -604,46 +632,36 @@ var Client = function(url) {
 		})
 		_t.socket.on('host', function(clients) {
 			// clear unused sessions
-			_t.objs.forEach(function(obj) {
+			_t.objects.forEach(function(obj) {
 				if (obj && obj.sid)
 					obj.finished = !clients[obj.sid]
 			})
 			// start hosting
 			if (!_t.hosting) {
-				_t.hosting = setInterval(function() {
-					_t.socket.emit('sync', getSyncData())
-				}, 200)
+				_t.hosting = true
+				_t.socket.emit('event', getSyncData())
 				$('body').append('<div '+
 					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
 					'you are now hosting</div>')
 			}
 		})
 		_t.socket.on('join', function(sid) {
-			newObject({
+			getObject({
 				cls: 'Player',
 				sid: sid,
-				id: Date.now()+':'+Math.random()
+				id: guid()
 			})
 		})
-		_t.socket.on('sync', function(data) {
-			if (data.action == '+') {
+		_t.socket.on('event', function(data) {
+			if (data.action == 'sync') {
 				data.objs.forEach(syncObject)
 			}
-			else if (data.action == '-') {
-				data.objs.forEach(function(d) {
-					var obj = _t.objs['#' + d.id]
-					if (obj) {
-						obj.finished = true
-						delete _t.objs['#' + d.id]
-					}
-				})
-			}
-			else {
-				ieach(_t.objs, function(id, obj) {
+			else if (data.action == 'sync-all') {
+				ieach(_t.objects, function(id, obj) {
 					if (obj)
 						obj.finished = true
 				})
-				ieach(data.objs, function(i, d, objs) {
+				ieach(data.objs, function(i, d) {
 					var obj = syncObject(d)
 					obj.finished = false
 				})
@@ -659,7 +677,6 @@ var Client = function(url) {
 			_t.socket.emit('join')
 	}
 
-	_t.inputs = [ ]
 	function initInput() {
 		$(window).bind('keydown keyup', function(e) {
 			_t.inputs.push({
@@ -671,9 +688,47 @@ var Client = function(url) {
 		})
 	}
 
-	_t.keys = { }
-	_t.objs = newAnimateList()
+	function getObject(data) {
+		// make sure that id is unique
+		if (_t.objIndex[data.id] && !_t.objIndex[data.id].finished)
+			return _t.objIndex[data.id]
+
+		//
+		data.scene = _t.scene
+		data.terrain = _t.terrain
+		data.syncs = _t.syncs
+		//
+		data.local = data.sid == _t.socket.io.engine.id
+		// add object to queue if all resource loaded
+		data.onready = function() {
+			this.ready = true
+			_t.objects.add(this)
+		}
+		//
+		if (data.cls == 'Player') {
+			data.keys = _t.keys[data.sid] ||
+				(_t.keys[data.sid] = { })
+			data.camera = data.local && _t.camera
+			data.terrainUpdateInterval = data.local ? 20 : 100
+		}
+		//
+		var obj = null
+		try {
+			obj = new this[data.cls](data)
+		}
+		catch (e) {
+			obj = new Static(data)
+		}
+
+		// save it in objIndex
+		obj.id = data.id
+		_t.objIndex[data.id] = obj
+		return obj
+	}
+	window.getObject = getObject
+
 	_t.run = function(dt) {
+		//
 		if (_t.inputs.length) {
 			var localInputs = []
 			_t.inputs.forEach(function(e) {
@@ -688,45 +743,18 @@ var Client = function(url) {
 				_t.socket.emit('input', localInputs)
 			_t.inputs.length = 0
 		}
-		_t.objs.run('run', dt)
+		//
+		if (_t.syncs.length) {
+			if (_t.hosting)
+				_t.socket.emit('event', getSyncData(_t.syncs))
+			_t.syncs.length = 0
+		}
+		//
+		_t.objects.run('run', dt)
 	}
 	_t.beforeRender = function(dt) {
-		_t.objs.run('beforeRender', dt)
+		_t.objects.run('beforeRender', dt)
 	}
-
-	function newObject(data) {
-		//
-		data.scene = _t.scene
-		data.terrain = _t.terrain
-		data.local = data.sid == _t.socket.io.engine.id
-		// add object to queue if all resource loaded
-		data.onready = function() {
-			this.ready = true
-			_t.objs.add(this)
-		}
-		//
-		var obj = null
-		if (data.cls == 'Player') {
-			data.keys = _t.keys[data.sid] ||
-				(_t.keys[data.sid] = { })
-			data.camera = data.local && _t.camera
-			data.terrainUpdateInterval = data.local ? 20 : 100
-			obj = new Player(data)
-		}
-		else if (data.cls == 'W3Player') {
-			obj = new W3Player(data)
-		}
-		else {
-			obj = new Basic(data)
-		}
-
-		var id = '#' + obj.id
-		if (_t.objs[id])
-			_t.objs[id].finished = true
-		_t.objs[id] = obj
-		return obj
-	}
-	this.newObject = newObject
 
 	// load the height map
 	new ResLoader('textures/terrain/China.png', ResLoader.handleImg, function(heightMap) {
@@ -772,9 +800,9 @@ var Server = function(io) {
 				setAsHost(socket)
 		})
 
-		socket.on('sync', function(data) {
+		socket.on('event', function(data) {
 			if (host === socket)
-				socket.broadcast.emit('sync', data)
+				socket.broadcast.emit('event', data)
 		})
 
 		socket.on('join', function() {
