@@ -27,6 +27,10 @@ function extend(data, ext) {
 		data[k] = ext[k]
 	return data
 }
+function value() {
+	for (var i = 0; i < arguments.length; i += 2)
+		if (arguments[i]) return arguments[i + 1]
+}
 function newTicker(t, f, d) {
 	var _t = {
 		t: t,
@@ -146,7 +150,7 @@ function getReqsDict() {
 	}, { })
 }
 
-function getImageData(img, sx, sy, sw, sh, w, h) {
+function getCanvas(img, sx, sy, sw, sh, w, h) {
 	var cv = document.createElement('canvas')
 		dc = cv.getContext('2d')
 	sx = sx || 0
@@ -155,23 +159,34 @@ function getImageData(img, sx, sy, sw, sh, w, h) {
 	sh = sh || img.height - sy
 	cv.width  = w = w || sw
 	cv.height = h = h || sh
-	if (sx > 0 && sy > 0 && sw > 0 && sh > 0 && w > 0 && h > 0)
+	if (sx >= 0 && sy >= 0 && sw > 0 && sh > 0 && w > 0 && h > 0)
 		dc.drawImage(img, sx, sy, sw, sh, 0, 0, w, h)
 	return cv
 }
 
-function reverseAnimation(anim) {
-	var rev = JSON.parse(JSON.stringify(anim))
+function scaleAnimation(anim, scale) {
+	var a = JSON.parse(JSON.stringify(anim))
 
-	var length = rev.length
-	rev.hierarchy.forEach(function(h) {
+	var length = a.length
+	a.length *= scale
+	a.hierarchy.forEach(function(h) {
+		h.keys.forEach(function(k, i) {
+			k.time *= scale
+		})
+	})
+	return a
+}
+function reverseAnimation(anim) {
+	var a = JSON.parse(JSON.stringify(anim))
+
+	var length = a.length
+	a.hierarchy.forEach(function(h) {
 		h.keys = h.keys.reverse()
 		h.keys.forEach(function(k, i) {
 			k.time = length - k.time
 		})
 	})
-
-	return rev
+	return a
 }
 
 var THREE = this.THREE || require('three'),
@@ -240,8 +255,11 @@ ResLoader.handleW3Char = function(url, callback) {
 			for (var i = 0, a; a = geo.animations[i]; i ++)
 				if (a.name.toLowerCase().indexOf('walk') >= 0) break
 			if (a) {
-				var r = reverseAnimation(a)
-				r.name = 'walk reverse'
+				var s = scaleAnimation(a, 0.4)
+				s.name = 'player-walk'
+				geo.animations.push(s)
+				var r = reverseAnimation(s)
+				r.name = 'player-walk-back'
 				geo.animations.push(r)
 			}
 		})
@@ -251,7 +269,6 @@ ResLoader.handleW3Char = function(url, callback) {
 
 var Terrain = function(scene, heightMap, textureSrc) {
 	var _t = this,
-		texture = THREE.ImageUtils.loadTexture(textureSrc),
 		// max height
 		mh = 1024,
 		// ground size (in pixels)
@@ -260,11 +277,14 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		// ground points count
 		pw = 32,
 		ph = 32,
-		// image clip (in pixels)
-		iw = 32,
-		ih = 32,
 		// cached terrains
 		cached = { }
+	var heightMapDC = getCanvas(heightMap).getContext('2d'),
+		texture = THREE.ImageUtils.loadTexture(textureSrc),
+		material = new THREE.MeshLambertMaterial({ color:0xffffff, map:texture })
+		//material = new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true })
+	//material.map.repeat.set(64, 64)
+	//material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
 	_t.getHeight = function(x, y, z) {
 		var i = Math.floor(x / gw + 0.5),
 			j = Math.floor(y / gh + 0.5),
@@ -272,11 +292,11 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		var ground = cached[k] || (cached[k] = _t.create(i, j))
 		ground.visible = true
 		//
-		var origin = new THREE.Vector3(x, z, y)
-			direction = new THREE.Vector3(0, -1, 0),
+		var origin = new THREE.Vector3(x, y, z)
+			direction = new THREE.Vector3(0, 0, -1),
 			raycast = new THREE.Raycaster(origin, direction),
 			intersect = raycast.intersectObject(ground)
-		return intersect.length ? intersect[0].point.y : 0
+		return intersect.length ? intersect[0].point.z : 0
 	}
 	_t.checkVisible = function(x, y) {
 		var i = Math.floor(x / gw + 0.5),
@@ -293,13 +313,14 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		}
 	}
 	_t.create = function(i, j) {
-		var x = iw * i - iw / 2 + heightMap.width / 2,
-			y = ih * j - ih / 2 + heightMap.height / 2,
-			px = i * gw,
-			py = j * gh
-		// get height map
-		var canvas = getImageData(heightMap, x, y, iw+1, ih+1, pw+1, ph+1),
-			imdata = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+		var px = pw * i - pw / 2 + heightMap.width / 2,
+			py = ph * j - ph / 2 + heightMap.height / 2,
+			gx = i * gw,
+			gy = j * gh
+		// Note: the order of getImageData() and geometry.vertices is reversed at y direction
+		// so we take data from the reversed y
+		py = heightMap.height - (py + ph + 1)
+		var imdata = heightMapDC.getImageData(px, py, pw+1, ph+1).data
 		//
 		var geometry = new THREE.PlaneGeometry(gw, gh, pw, ph)
 		geometry.dynamic = true
@@ -311,20 +332,12 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		geometry.computeFaceNormals()
 		geometry.computeVertexNormals()
 		//
-		var material = new THREE.MeshPhongMaterial({ color:0xffffff, map:texture })
-		//
 		var ground = new THREE.Mesh(geometry, material)
-		ground.applyMatrix(new THREE.Matrix4().makeRotationX(- Math.PI / 2))
-		ground.position.set(px, 0, py)
-		/*
-		ground.material.map.repeat.set(64, 64)
-		ground.material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
-		ground.castShadow = true
-		*/
+		ground.position.set(gx, gy, 0)
 		ground.receiveShadow = true
-		console.log('ground ('+i+', '+j+') at ('+px+', '+py+') created')
 		//
 		scene.add(ground)
+		console.log('ground ('+i+', '+j+') at ('+gx+', '+gy+') created')
 		return ground
 	}
 	return _t
@@ -345,12 +358,12 @@ var Static = (function(proto) {
 				var m = this.mesh
 					b = new THREE.BoundingBoxHelper(m)
 				b.update()
-				this.distToTop = b.box.max.y -  m.position.y
-				this.distToBottom = m.position.y - b.box.min.y
+				this.distToTop = b.box.max.z -  m.position.z
+				this.distToBottom = m.position.z - b.box.min.z
 			}
 			// put it on the terrain
 			var p = this.mesh.position
-			p.y = this.terrain.getHeight(p.x, p.z, 5000) + this.distToBottom
+			p.z = this.terrain.getHeight(p.x, p.y, 5000) + this.distToBottom
 		}
 		// simply call this.onready
 		this.onready && this.onready()
@@ -359,9 +372,6 @@ var Static = (function(proto) {
 	init: function() {
 		this.scene && this.scene.add(this.mesh)
 		console.log('object #' + this.id + ' created')
-	},
-	run: function(dt) {
-		//
 	},
 	quit: function() {
 		this.scene && this.scene.remove(this.mesh)
@@ -385,6 +395,16 @@ var Basic = (function(proto) {
 	//
 	proto.terrainUpdateInterval = 100
 	proto.dataSyncInterval = 2000
+	proto.controls = null
+	proto.gravity = 0.012
+	proto.speed = 0
+	proto.angularSpeed = 0
+	proto.moveConfig = {
+		speed: 0.25,
+		angularSpeed: 0.003,
+		rotateSpeed: 0.1,
+		jumpSpeed: 6
+	}
 	//
 	proto.run = function(dt) {
 		// move!
@@ -393,35 +413,64 @@ var Basic = (function(proto) {
 			r = m.rotation,
 			v = m.velocity
 		p.add(v)
+
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.001, 0.05)
+		if (p.to) updateVector(p, 0.05, 0.05, 0.001)
 		if (r.to) updateVector(r, 0.03)
+
 		// walk on terrain
 		if (this.terrain) {
 			// test terrain height every 10 ticks
 			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
 				this.terrainUpdateTick = 0
-				this.terrainY = this.terrain.getHeight(p.x, p.z, p.y + this.distToTop) + this.distToBottom
+				this.terrainZ = this.terrain.getHeight(p.x, p.y, p.z + this.distToTop) + this.distToBottom
 			}
 			// keep object on the ground
-			if (p.y < this.terrainY) {
-				p.y = this.terrainY
-				v.y = 0
+			if (p.z < this.terrainZ) {
+				p.z = this.terrainZ
+				v.z = 0
 			}
 			// add gravity if object is over the ground
-			else if (p.y > this.terrainY) {
-				v.y -= 0.012 * dt
+			else if (p.z > this.terrainZ) {
+				v.z -= this.gravity * dt
 			}
 			// keep terrain visible if there is a camera with this object
 			if (this.camera)
-				this.terrain.checkVisible(p.x, p.z)
+				this.terrain.checkVisible(p.x, p.y)
 		}
+
 		//
 		if (this.syncs) {
 			if (!((this.dataSyncTick += dt) < this.dataSyncInterval)) {
 				this.dataSyncTick = 0
 				this.syncs.push(this)
 			}
+		}
+
+		//
+		if (this.controls) {
+			var ctrl = this.controls,
+				conf = this.moveConfig,
+				mesh = this.mesh
+
+			var speed = value(
+				ctrl.moveLeft || ctrl.moveRight, this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed,
+				ctrl.moveForward, conf.speed,
+				ctrl.moveBackward, -conf.speed,
+				1, 0)
+			if (this.speed = this.speed*0.94 + speed*0.06)
+				mesh.translateX(this.speed * dt)
+
+			var aspeed = value(
+				ctrl.moveLeft, conf.angularSpeed,
+				ctrl.moveRight, -conf.angularSpeed,
+				1, 0)
+			if (this.angularSpeed = this.angularSpeed*0.9 + aspeed*0.1)
+				mesh.rotation.z += this.angularSpeed * dt
+
+			// you can jump if on the ground
+			if (ctrl.jump && mesh.position.z == this.terrainZ)
+				mesh.velocity.z = conf.jumpSpeed
 		}
 	}
 	var sync = proto.sync
@@ -446,9 +495,13 @@ var Basic = (function(proto) {
 		create.call(this, data)
 		// add velocity
 		this.mesh.velocity = new THREE.Vector3()
+		// 
+		if (this.camera)
+			this.mesh.add(this.camera)
 	}, proto)
 })(new Static())
 
+/*
 var Player = (function(proto) {
 	proto.dataSyncInterval = 200
 	// sync model skin
@@ -466,7 +519,7 @@ var Player = (function(proto) {
 			return data
 		}
 	}
-	// run with control
+	// run with controls
 	var run = proto.run
 	proto.run = function(dt) {
 		var ctrl = this.model.controls
@@ -483,9 +536,6 @@ var Player = (function(proto) {
 		this.model.update(dt / 1000)
 		//
 		run.call(this, dt)
-		// you can jump if on the ground
-		if (ctrl.jump && this.mesh.position.y == this.terrainY)
-			this.mesh.velocity.y = 6
 	}
 	// cerate model
 	var create = proto.create
@@ -504,19 +554,36 @@ var Player = (function(proto) {
 			//
 			_t.skin = Math.floor(Math.random() * model.conf.skins.length)
 			_t.model.setSkin(_t.skin)
-			// 
-			if (_t.camera)
-				_t.mesh.add(_t.camera)
 		})
 	}, proto)
 })(new Basic())
+*/
 
 var W3Player = (function(proto) {
 	proto.dataSyncInterval = 200
+	//
 	var run = proto.run
 	proto.run = function(dt) {
+		if (this.keys) {
+			var ks = this.keys,
+				ctrl = this.controls || (this.controls = { })
+			ctrl.moveForward  = ks.W || ks.UP
+			ctrl.moveBackward = ks.S || ks.DOWN
+			ctrl.moveLeft  = ks.A || ks.LEFT
+			ctrl.moveRight = ks.D || ks.RIGHT
+			ctrl.crouch = ks.ctrlKey
+			ctrl.jump = ks.SPACE || ks.X
+			ctrl.attack = ks.Z
+		}
 		//
 		run.call(this, dt)
+		//
+		if (this.speed > 0.01)
+			this.model.playAnimation('player-walk')
+		else if (this.speed < -0.01)
+			this.model.playAnimation('player-walk-back')
+		else
+			this.model.playAnimation('Stand')
 	}
 	proto.beforeRender = function(dt) {
 		this.model.beforeRender(dt)
@@ -524,10 +591,15 @@ var W3Player = (function(proto) {
 	var create = proto.create
 	return newClass(function(data) {
 		var _t = this,
-			url = data.modelUrl
+			url = data.modelUrl || 'models/mdl/hakurei reimu.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
+			_t.name = url.split('/').pop().replace(/\.\w+$/, '').toLowerCase()
 			_t.model = new THREE.W3Character(geometries)
 			_t.mesh = _t.model.root
+			_t.mesh.children.forEach(function(mesh) {
+				mesh.castShadow = true
+				mesh.receiveShadow = true
+			})
 			//
 			create.call(_t, data)
 		})
@@ -540,17 +612,18 @@ var Client = function(url) {
 	var conf = getReqsDict()
 
 	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 6000)
-	_t.camera.position.set(0, 150, -800)
+	_t.camera.up.set(0, 0, 1)
+	_t.camera.position.set(-800, 0, 300)
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
 	_t.scene.fog = new THREE.Fog(0xffffff, 3000, 6000)
 	_t.scene.add(_t.camera)
 
-	_t.scene.add(new THREE.AmbientLight(0x222222))
+	_t.scene.add(new THREE.AmbientLight(0xaaaaaa))
 
 	var light = new THREE.DirectionalLight(0xffffff, 2.25)
-	light.position.set(200, 450, 500)
+	light.position.set(200, 500, 450)
 	light.castShadow = conf.noshadow === undefined
 	light.shadowMapWidth = 1024
 	light.shadowMapHeight = 1024
@@ -609,6 +682,7 @@ var Client = function(url) {
 			if (!obj || !obj.id || obj.finished) return
 			list.push({
 				data: obj.sync && obj.sync(),
+				finished: obj.finished,
 				cls: obj.cls,
 				id: obj.id,
 				sid: obj.sid,
@@ -619,6 +693,7 @@ var Client = function(url) {
 
 	function syncObject(data) {
 		var obj = getObject(data)
+		obj.finished = data.finished
 		if (data.data && obj.ready)
 			obj.sync(data.data)
 		return obj
@@ -639,7 +714,9 @@ var Client = function(url) {
 			// start hosting
 			if (!_t.hosting) {
 				_t.hosting = true
-				_t.socket.emit('event', getSyncData())
+				setInterval(function() {
+					_t.socket.emit('event', getSyncData())
+				}, 1000)
 				$('body').append('<div '+
 					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
 					'you are now hosting</div>')
@@ -647,7 +724,7 @@ var Client = function(url) {
 		})
 		_t.socket.on('join', function(sid) {
 			getObject({
-				cls: 'Player',
+				cls: 'W3Player',
 				sid: sid,
 				id: guid()
 			})
@@ -657,14 +734,11 @@ var Client = function(url) {
 				data.objs.forEach(syncObject)
 			}
 			else if (data.action == 'sync-all') {
-				ieach(_t.objects, function(id, obj) {
+				_t.objects.forEach(function(obj) {
 					if (obj)
 						obj.finished = true
 				})
-				ieach(data.objs, function(i, d) {
-					var obj = syncObject(d)
-					obj.finished = false
-				})
+				data.objs.forEach(syncObject)
 			}
 		})
 		_t.socket.on('input', function(data) {
@@ -690,7 +764,7 @@ var Client = function(url) {
 
 	function getObject(data) {
 		// make sure that id is unique
-		if (_t.objIndex[data.id] && !_t.objIndex[data.id].finished)
+		if (_t.objIndex[data.id])
 			return _t.objIndex[data.id]
 
 		//
@@ -705,7 +779,7 @@ var Client = function(url) {
 			_t.objects.add(this)
 		}
 		//
-		if (data.cls == 'Player') {
+		if (data.cls == 'Player' || data.cls == 'W3Player') {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
