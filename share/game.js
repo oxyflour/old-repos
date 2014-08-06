@@ -310,7 +310,6 @@ var Terrain = function(scene, heightMap, textureSrc) {
 			j = Math.floor(y / gh + 0.5),
 			k = i + ',' + j
 		var ground = cached[k] || (cached[k] = _t.create(i, j))
-		ground.visible = true
 		//
 		var origin = new THREE.Vector3(x, y, z)
 			direction = new THREE.Vector3(0, 0, -1),
