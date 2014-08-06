@@ -435,7 +435,7 @@ var Basic = (function(proto) {
 		p.add(v)
 
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.05, 0.001)
+		if (p.to) updateVector(p, 0.05, 0.05, 0.000)
 		if (r.to) updateVector(r, 0.03)
 
 		// walk on terrain
@@ -873,6 +873,29 @@ var Client = function(url) {
 	new ResLoader('textures/terrain/China.png', ResLoader.handleImg, function(heightMap) {
 		_t.terrain = new Terrain(_t.scene, heightMap, 'textures/terrain/grasslight-big.jpg')
 		_t.terrain.checkVisible(0, 0)
+
+		new ResLoader('models/mdl/blsss_01.txt', ResLoader.handleW3Char, function(geometries) {
+			var mesh = new THREE.W3Character(geometries).root
+			mesh.position.x = 1200
+			mesh.rotation.z = Math.PI
+			getObject({
+				cls: 'Static',
+				id: 'Temple',
+				mesh: mesh
+			})
+		})
+
+		new ResLoader('models/mdl/sssss_01.txt', ResLoader.handleW3Char, function(geometries) {
+			var mesh = new THREE.W3Character(geometries).root
+			mesh.position.x = 1000
+			mesh.position.y = 1000
+			mesh.rotation.z = Math.PI
+			getObject({
+				cls: 'Static',
+				id: 'TempleA',
+				mesh: mesh
+			})
+		})
 
 		initInput()
 		connectToServer(url, conf.nojoin === undefined)
