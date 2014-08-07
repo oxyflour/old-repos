@@ -723,6 +723,13 @@ var Client = function(url) {
 	_t.renderer.setClearColor(_t.scene.fog.color, 1)
 	document.body.appendChild(_t.renderer.domElement)
 
+	_t.stats = new Stats()
+	aSet(_t.stats.domElement.style, 
+		'position', 'absolute',
+		'margin', '5px',
+		'bottom', '0')
+	document.body.appendChild(_t.stats.domElement)
+
 	_t.controls = new THREE.OrbitControls(_t.camera, _t.renderer.domElement)
 	_t.controls.noKeys = true
 
@@ -895,6 +902,7 @@ var Client = function(url) {
 		_t.objects.run('run', dt)
 	}
 	_t.beforeRender = function(dt) {
+		_t.stats.update()
 		_t.objects.run('render', dt)
 	}
 
