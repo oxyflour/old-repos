@@ -430,9 +430,11 @@ var Static = (function(proto) {
 			rotation: mesh.rotation.toArray(),
 		}
 	},
-	beforeRender: function(dt) {
-		var p = this.mesh.position
-		this.mesh.visible = this.terrain.isVisible(p.x, p.y)
+	render: function(dt) {
+		if (this.terrain) {
+			var p = this.mesh.position
+			this.mesh.visible = this.terrain.isVisible(p.x, p.y)
+		}
 	}
 })
 
@@ -629,8 +631,8 @@ var W3Player = (function(proto) {
 		//
 		run.call(this, dt)
 	}
-	var beforeRender = proto.beforeRender
-	proto.beforeRender = function(dt) {
+	var render = proto.render
+	proto.render = function(dt) {
 		this.model.beforeRender(dt)
 		//
 		var ctrl = this.controls
@@ -649,7 +651,7 @@ var W3Player = (function(proto) {
 		if (this.camera)
 			this.terrain.checkVisible(pos.x, pos.y)
 		//
-		beforeRender.call(this, dt)
+		render.call(this, dt)
 	}
 	var create = proto.create
 	return newClass(function(data) {
@@ -891,7 +893,7 @@ var Client = function(url) {
 		_t.objects.run('run', dt)
 	}
 	_t.beforeRender = function(dt) {
-		_t.objects.run('beforeRender', dt)
+		_t.objects.run('render', dt)
 	}
 
 	// load the height map
