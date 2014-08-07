@@ -27,10 +27,16 @@ function extend(data, ext) {
 		data[k] = ext[k]
 	return data
 }
-function value() {
+
+function aValue() {
 	for (var i = 0; i < arguments.length; i += 2)
 		if (arguments[i]) return arguments[i + 1]
 }
+function aSet(d) {
+	for (var i = 1; i < arguments.length; i += 2)
+		d[arguments[i]] = arguments[i+1]
+}
+
 function newTicker(t, f, d) {
 	var _t = {
 		t: t,
@@ -472,7 +478,7 @@ var Basic = (function(proto) {
 				conf = this.moveConfig,
 				mesh = this.mesh
 
-			var speed = value(
+			var speed = aValue(
 				ctrl.moveLeft || ctrl.moveRight, this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed,
 				ctrl.moveForward, conf.speed,
 				ctrl.moveBackward, -conf.speed,
@@ -480,7 +486,7 @@ var Basic = (function(proto) {
 			if (this.speed = this.speed*0.94 + speed*0.06)
 				mesh.translateX(this.speed * dt)
 
-			var aspeed = value(
+			var aspeed = aValue(
 				ctrl.moveLeft, conf.angularSpeed,
 				ctrl.moveRight, -conf.angularSpeed,
 				1, 0)
@@ -583,14 +589,10 @@ var W3Player = (function(proto) {
 	// sync model skin
 	var sync = proto.sync
 	proto.sync = function(data) {
-		if (data) {
+		if (data)
 			sync.call(this, data)
-		}
-		else {
-			data = sync.call(this)
-			data.name = this.name
-			return data
-		}
+		else
+			return aSet(sync.call(this), 'name', this.name)
 	}
 	//
 	var run = proto.run
