@@ -35,6 +35,7 @@ function aValue() {
 function aSet(d) {
 	for (var i = 1; i < arguments.length; i += 2)
 		d[arguments[i]] = arguments[i+1]
+	return d
 }
 
 function newTicker(t, f, d) {
@@ -296,62 +297,38 @@ ResLoader.handleW3Char = function(url, callback) {
 var Terrain = function(scene, heightMap, textureSrc) {
 	var _t = this,
 		// max height
-		mh = 1024,
+		maxHeight = 1024,
 		// ground size (in pixels)
-		gw = 1024*4,
-		gh = 1024*4,
-		// ground points count
-		pw = 32,
-		ph = 32,
+		groundBlock = 1024*4,
+		// grid size (distance between two vertex points, in pixels)
+		groundGrid = 128,
+		// segments
+		groundSegment = groundBlock / groundGrid,
 		// cached terrains
 		cached = { }
+
 	var heightMapDC = getCanvas(heightMap).getContext('2d'),
 		texture = THREE.ImageUtils.loadTexture(textureSrc),
 		material = new THREE.MeshLambertMaterial({ color:0xffffff, map:texture })
 		//material = new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true })
-	//material.map.repeat.set(64, 64)
-	//material.map.wrapS = ground.material.map.wrapT = THREE.RepeatWrapping
-	_t.getHeight = function(x, y, z) {
-		var i = Math.floor(x / gw + 0.5),
-			j = Math.floor(y / gh + 0.5),
-			k = i + ',' + j
-		var ground = cached[k] || (cached[k] = _t.create(i, j))
-		//
-		var origin = new THREE.Vector3(x, y, z)
-			direction = new THREE.Vector3(0, 0, -1),
-			raycast = new THREE.Raycaster(origin, direction),
-			intersect = raycast.intersectObject(ground)
-		return intersect.length ? intersect[0].point.z : 0
-	}
-	_t.checkVisible = function(x, y) {
-		var i = Math.floor(x / gw + 0.5),
-			j = Math.floor(y / gh + 0.5)
-		for (var k in cached)
-			cached[k].visible = false
-		for (var m = i - 1; m <= i + 1; m ++) {
-			for (var n = j - 1; n <= j + 1; n ++) {
-				var k = m + ',' + n
-				if (!cached[k])
-					cached[k] = _t.create(m, n)
-				cached[k].visible = true
-			}
-		}
-	}
-	_t.create = function(i, j) {
-		var px = pw * i - pw / 2 + heightMap.width / 2,
-			py = ph * j - ph / 2 + heightMap.height / 2,
-			gx = i * gw,
-			gy = j * gh
+	material.map.repeat.set(groundBlock / 2048, groundBlock / 2048)
+	material.map.wrapS = material.map.wrapT = THREE.RepeatWrapping
+
+	var create = function(i, j) {
+		var px = groundSegment * i - groundSegment / 2 + heightMap.width / 2,
+			py = groundSegment * j - groundSegment / 2 + heightMap.height / 2,
+			gx = i * groundBlock,
+			gy = j * groundBlock
 		// Note: the order of getImageData() and geometry.vertices is reversed at y direction
 		// so we take data from the reversed y
-		py = heightMap.height - (py + ph + 1)
-		var imdata = heightMapDC.getImageData(px, py, pw+1, ph+1).data
+		py = heightMap.height - (py + groundSegment + 1)
+		var imdata = heightMapDC.getImageData(px, py, groundSegment+1, groundSegment+1).data
 		//
-		var geometry = new THREE.PlaneGeometry(gw, gh, pw, ph)
+		var geometry = new THREE.PlaneGeometry(groundBlock, groundBlock, groundSegment, groundSegment)
 		geometry.dynamic = true
 		if (geometry.vertices.length*4 == imdata.length) {
 			ieach(geometry.vertices, function(i, v) {
-				v.z = imdata[i * 4] / 255 * mh
+				v.z = imdata[i * 4] / 255 * maxHeight
 			})
 		}
 		geometry.computeFaceNormals()
@@ -361,10 +338,49 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		ground.position.set(gx, gy, 0)
 		ground.receiveShadow = true
 		//
+		ground.updateMatrixWorld()
 		scene.add(ground)
 		console.log('ground ('+i+', '+j+') at ('+gx+', '+gy+') created')
 		return ground
 	}
+
+	var raycast = new THREE.Raycaster(),
+		dirDown = new THREE.Vector3(0, 0, -1)
+	_t.getHeight = function(x, y, z) {
+		var i = Math.floor(x / groundBlock + 0.5),
+			j = Math.floor(y / groundBlock + 0.5),
+			k = i + ',' + j,
+			ground = cached[k] || (cached[k] = create(i, j)),
+			origin = new THREE.Vector3(x, y, z)
+		//
+		raycast.set(origin, dirDown)
+		var intersect = raycast.intersectObject(ground)
+		//
+		return intersect.length ? intersect[0].point.z : 0
+	}
+
+	var region = { min:{ x:0, y:0 }, max:{ x:0, y:0 } }
+	_t.checkVisible = function(x, y) {
+		var i = Math.floor(x / groundBlock + 0.5),
+			j = Math.floor(y / groundBlock + 0.5)
+		for (var k in cached)
+			cached[k].visible = false
+		for (var m = i - 1; m <= i + 1; m ++) {
+			for (var n = j - 1; n <= j + 1; n ++) {
+				var k = m + ',' + n
+				if (!cached[k])
+					cached[k] = create(m, n)
+				cached[k].visible = true
+			}
+		}
+		aSet(region.min, 'x', (i-1.5)*groundBlock, 'y', (j-1.5)*groundBlock)
+		aSet(region.max, 'x', (i+1.5)*groundBlock, 'y', (j+1.5)*groundBlock)
+	}
+	_t.isVisible = function(x, y) {
+		return x > region.min.x && x < region.max.x &&
+			y > region.min.y && y < region.max.y
+	}
+
 	return _t
 }
 
@@ -413,6 +429,10 @@ var Static = (function(proto) {
 			position: mesh.position.toArray(),
 			rotation: mesh.rotation.toArray(),
 		}
+	},
+	beforeRender: function(dt) {
+		var p = this.mesh.position
+		this.mesh.visible = this.terrain.isVisible(p.x, p.y)
 	}
 })
 
@@ -459,9 +479,6 @@ var Basic = (function(proto) {
 			else if (p.z > this.terrainZ) {
 				v.z -= this.gravity * dt
 			}
-			// keep terrain visible if there is a camera with this object
-			if (this.camera)
-				this.terrain.checkVisible(p.x, p.y)
 		}
 
 		//
@@ -612,6 +629,7 @@ var W3Player = (function(proto) {
 		//
 		run.call(this, dt)
 	}
+	var beforeRender = proto.beforeRender
 	proto.beforeRender = function(dt) {
 		this.model.beforeRender(dt)
 		//
@@ -626,6 +644,12 @@ var W3Player = (function(proto) {
 			this.model.playAnimation('bwalk')
 		else
 			this.model.playAnimation(this.anims.stand)
+		// keep terrain visible if there is a camera with this object
+		var pos = this.mesh.position
+		if (this.camera)
+			this.terrain.checkVisible(pos.x, pos.y)
+		//
+		beforeRender.call(this, dt)
 	}
 	var create = proto.create
 	return newClass(function(data) {
