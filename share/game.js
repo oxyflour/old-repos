@@ -780,22 +780,22 @@ var Client = function(url) {
 			if (!_t.hosting) {
 				_t.hosting = true
 				setInterval(function() {
-					_t.socket.emit('event', getSyncData())
+					_t.socket.emit('broadcast', getSyncData())
 				}, 1000)
 				$('body').append('<div '+
 					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
 					'you are now hosting</div>')
 			}
 		})
-		_t.socket.on('join', function(data) {
-			getObject({
+		_t.socket.on('request', function(data) {
+			if (data.action == 'join') getObject({
 				id: guid(),
 				sid: data.sid,
 				cls: 'W3Player',
 				name: data.name,
 			})
 		})
-		_t.socket.on('event', function(data) {
+		_t.socket.on('broadcast', function(data) {
 			if (data.action == 'sync') {
 				data.objs.forEach(syncObject)
 			}
@@ -813,8 +813,10 @@ var Client = function(url) {
 			})
 		})
 
-		if (join)
-			_t.socket.emit('join', conf.name)
+		if (join) _t.socket.emit('request', {
+			action: 'join',
+			name: conf.name
+		})
 	}
 
 	function initInput() {
@@ -886,7 +888,7 @@ var Client = function(url) {
 		//
 		if (_t.syncs.length) {
 			if (_t.hosting)
-				_t.socket.emit('event', getSyncData(_t.syncs))
+				_t.socket.emit('broadcast', getSyncData(_t.syncs))
 			_t.syncs.length = 0
 		}
 		//
@@ -958,23 +960,25 @@ var Server = function(io) {
 		console.log('client ' + sid + ' connected')
 		if (!host) setAsHost(socket)
 
+		// ping!
 		socket.on('ping', function(data) {
 			if (!host)
 				setAsHost(socket)
 		})
 
-		socket.on('event', function(data) {
+		// broadcast event to clients
+		socket.on('broadcast', function(data) {
 			if (host === socket)
-				socket.broadcast.emit('event', data)
+				socket.broadcast.emit('broadcast', data)
 		})
 
-		socket.on('join', function(name) {
-			if (host) host.emit('join', {
-				sid: sid,
-				name: name
-			})
+		// redirect request to host
+		socket.on('request', function(data) {
+			if (host)
+				host.emit('request', aSet(data, 'sid', sid))
 		})
 
+		// always broadcast inputs
 		socket.on('input', function(data) {
 			socket.broadcast.emit('input', data)
 		})
