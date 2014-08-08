@@ -28,6 +28,10 @@ function extend(data, ext) {
 	return data
 }
 
+function slerp(from, to, factor) {
+	return from * (1 - factor) + to * factor
+}
+
 function aValue() {
 	for (var i = 0; i < arguments.length; i += 2)
 		if (arguments[i]) return arguments[i + 1]
@@ -171,18 +175,6 @@ function getCanvas(img, sx, sy, sw, sh, w, h) {
 	return cv
 }
 
-function scaleAnimation(anim, scale) {
-	var a = JSON.parse(JSON.stringify(anim))
-
-	var length = a.length
-	a.length *= scale
-	a.hierarchy.forEach(function(h) {
-		h.keys.forEach(function(k, i) {
-			k.time *= scale
-		})
-	})
-	return a
-}
 function reverseAnimation(anim) {
 	var a = JSON.parse(JSON.stringify(anim))
 
@@ -226,6 +218,9 @@ ResLoader.handleImg = function(url, callback) {
 	}
 	check()
 }
+ResLoader.handleJSON = function(url, callback) {
+	$.get(url, callback, 'json')
+}
 ResLoader.handleMd2Char = function(url, callback) {
 	var model = new MD2CharacterComplex()
 	model.conf = {
@@ -254,41 +249,10 @@ ResLoader.handleMd2Char = function(url, callback) {
 }
 ResLoader.handleW3Char = function(url, callback) {
 	THREE.LoadWar3Mdl(url, function(geometries) {
-		var fname = url.split('/').pop().replace(/\.\w+$/, '').toLowerCase()
 		geometries.forEach(function(geo) {
 			// update texture path
-			geo.extra.TexturePath = geo.extra.TexturePath ?
-				'models/mdl/' + geo.extra.TexturePath.split('\\').pop().replace(/\.\w+$/g, '.png') : ''
-			// update animation names
-			var animGroup = geo.animGroup = {
-				walk: [ ],
-				attack: [ ],
-				spell: [ ],
-				stand: [ ],
-			}
-			for (var i = 0, a; a = geo.animations[i]; i ++) {
-				var name = a.name.toLowerCase(),
-					list = null
-				if (name.indexOf('walk') >= 0)
-					list = animGroup.walk
-				else if (name.indexOf('attack') >= 0)
-					list = animGroup.attack
-				else if (name.indexOf('spell') >= 0)
-					list = animGroup.spell
-				else if (name.indexOf('stand') >= 0 && name.indexOf('ready') < 0)
-					list = animGroup.stand
-				if (list) {
-					list.push(a.name)
-					list[a.name] = i
-				}
-			}
-			// add reverse walking animation
-			if (animGroup.walk.length) {
-				var i = animGroup.walk[animGroup.walk[0]]
-					r = reverseAnimation(geo.animations[i])
-				r.name = 'bwalk'
-				geo.animations.push(r)
-			}
+			geo.extra.TexturePath = geo.extra.TexturePath &&
+				'models/mdl/' + geo.extra.TexturePath.split('\\').pop().replace(/\.\w+$/g, '.png')
 		})
 		callback(geometries)
 	})
@@ -457,7 +421,8 @@ var Basic = (function(proto) {
 		angularSpeed: 0.003,
 		rotateSpeed: 0.1,
 		jumpSpeed: 6,
-		shiftSpeed: 0.1,
+		// for flying objects
+		shiftSpeed: 0.0,
 	}
 	//
 	proto.run = function(dt) {
@@ -477,12 +442,19 @@ var Basic = (function(proto) {
 			// test terrain height every 10 ticks
 			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
 				this.terrainUpdateTick = 0
-				this.terrainZ = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop) + this.box.toBottom + this.floatHeight
+				this.terrainHeight = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop)
 			}
+			this.terrainZ = this.terrainHeight + this.floatHeight + this.box.toBottom
 			// keep object on the ground
 			if (p.z < this.terrainZ) {
-				p.z = this.terrainZ
-				v.z = 0
+				if (this.terrainZ - p.z < 0.01) {
+					p.z = this.terrainZ
+					v.z = 0
+				}
+				else {
+					p.z = slerp(p.z, this.terrainZ, 0.5)
+					v.z *= 0.5
+				}
 			}
 			// add gravity if object is over the ground
 			else if (p.z > this.terrainZ) {
@@ -509,22 +481,24 @@ var Basic = (function(proto) {
 				ctrl.moveForward, conf.speed,
 				ctrl.moveBackward, -conf.speed,
 				1, 0)
-			if (this.speed = this.speed*0.94 + speed*0.06)
+			if (this.speed = slerp(this.speed, speed, 0.06))
 				mesh.translateX(this.speed * dt)
 
 			var aspeed = aValue(
 				ctrl.moveLeft, conf.angularSpeed,
 				ctrl.moveRight, -conf.angularSpeed,
 				1, 0)
-			if (this.angularSpeed = this.angularSpeed*0.9 + aspeed*0.1)
+			if (this.angularSpeed = slerp(this.angularSpeed, aspeed, 0.1))
 				mesh.rotation.z += this.angularSpeed * dt
 
 			// you can jump if on the ground
 			if (ctrl.jump) {
-				if (!this.gravity)
+				if (conf.shiftSpeed)
 					this.floatHeight += conf.shiftSpeed * dt
-				else if (mesh.position.z == this.terrainZ)
-					mesh.velocity.z = conf.jumpSpeed
+				else if (p.z < this.terrainZ) {
+					p.z = this.terrainZ
+					v.z = conf.jumpSpeed
+				}
 			}
 			//
 			if (ctrl.crouch) {
@@ -536,6 +510,7 @@ var Basic = (function(proto) {
 	var sync = proto.sync
 	proto.sync = function(data) {
 		if (data) {
+			this.floatHeight = data.floatHeight
 			var mesh = this.mesh
 			if (this.synced) {
 				mesh.position.to = new THREE.Vector3().fromArray(data.position)
@@ -547,14 +522,17 @@ var Basic = (function(proto) {
 				this.synced = true
 			}
 		}
-		else
-			return sync.call(this)
+		else return aSet(sync.call(this),
+			'floatHeight', this.floatHeight)
 	}
 	var create = proto.create
 	return newClass(function(data) {
 		create.call(this, data)
 		// add velocity
 		this.mesh.velocity = new THREE.Vector3()
+		//
+		if (this.moveConfig !== proto.moveConfig)
+			this.moveConfig = extend(extend({ }, proto.moveConfig), this.moveConfig)
 		// 
 		if (this.camera)
 			this.mesh.add(this.camera)
@@ -659,7 +637,7 @@ var W3Player = (function(proto) {
 		else if (this.speed > 0.01)
 			this.model.playAnimation(this.anims.walk)
 		else if (this.speed < -0.01)
-			this.model.playAnimation('bwalk')
+			this.model.playAnimation(this.anims.bwalk)
 		else
 			this.model.playAnimation(this.anims.stand)
 		// keep terrain visible if there is a camera with this object
@@ -669,19 +647,67 @@ var W3Player = (function(proto) {
 		//
 		render.call(this, dt)
 	}
+	function parseAnimGroup(animations) {
+		var animGroup = {
+			walk: [ ],
+			bwalk: 'bwalk',
+			attack: [ ],
+			spell: [ ],
+			stand: [ ],
+		}
+		for (var i = 0, a; a = animations[i]; i ++) {
+			var name = a.name.toLowerCase(),
+				list = null
+			if (name.indexOf('walk') >= 0)
+				list = animGroup.walk
+			else if (name.indexOf('attack') >= 0)
+				list = animGroup.attack
+			else if (name.indexOf('spell') >= 0)
+				list = animGroup.spell
+			else if (name.indexOf('stand') >= 0 && name.indexOf('ready') < 0)
+				list = animGroup.stand
+			if (list) {
+				list.push(a.name)
+				list[a.name] = i
+			}
+		}
+		return animGroup
+	}
 	var create = proto.create
 	return newClass(function(data) {
 		var _t = this,
 			url = 'models/mdl/'+(data.name || 'hakurei reimu')+'.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
-			_t.model = new THREE.W3Character(geometries)
-			_t.mesh = _t.model.root
-			_t.mesh.children.forEach(function(mesh) {
+			//
+			geometries.forEach(function(geo) {
+				// get animation group
+				var animGroup = geo.animGroup = parseAnimGroup(geo.animations)
+				// add reverse walking animation
+				if (animGroup.walk.length) {
+					var i = animGroup.walk[animGroup.walk[0]]
+						r = reverseAnimation(geo.animations[i])
+					r.name = 'bwalk'
+					geo.animations.push(r)
+				}
+			})
+			//
+			data.anims = geometries[0] && geometries[0].animGroup || { }
+			data.controls = { }
+			//
+			data.moveConfig = {
+				'hakurei reimu': {
+					speed: 0.1,
+				},
+			}[data.name] || { }
+			if ('remilia,yuyuko'.split(',').indexOf(data.name) >= 0)
+				data.moveConfig.shiftSpeed = 0.2
+			//
+			data.model = new THREE.W3Character(geometries)
+			data.mesh = data.model.root
+			data.mesh.children.forEach(function(mesh) {
 				mesh.castShadow = true
 				//mesh.receiveShadow = true
 			})
-			_t.anims = geometries[0] ? geometries[0].animGroup : { }
-			_t.controls = { }
 			//
 			create.call(_t, data)
 		})
@@ -874,7 +900,6 @@ var Client = function(url) {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
-			data.terrainUpdateInterval = data.local ? 20 : 100
 		}
 		//
 		var obj = null
