@@ -315,7 +315,7 @@ var Terrain = function(scene, heightMap, textureSrc) {
 			j = Math.floor(y / groundBlock + 0.5),
 			k = i + ',' + j,
 			ground = cached[k] || (cached[k] = create(i, j)),
-			origin = new THREE.Vector3(x, y, z)
+			origin = new THREE.Vector3(x, y, z || maxHeight + 1)
 		//
 		raycast.set(origin, dirDown)
 		var intersect = raycast.intersectObject(ground)
@@ -372,7 +372,7 @@ var Static = (function(proto) {
 			}
 			// put it on the terrain
 			var p = this.mesh.position
-			p.z = this.terrain.getHeight(p.x, p.y, 5000) + this.box.toBottom
+			p.z = this.terrain.getHeight(p.x, p.y) + this.box.toBottom
 		}
 		// simply call this.onready
 		this.onready && this.onready()
@@ -700,7 +700,7 @@ var W3Player = (function(proto) {
 					speed: 0.1,
 				},
 			}[data.name] || { }
-			data.canFly = 'remilia,yuyuko'.split(',').indexOf(data.name) >= 0
+			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.name) >= 0
 			//
 			data.model = new THREE.W3Character(geometries)
 			data.mesh = data.model.root
@@ -900,8 +900,7 @@ var Client = function(url) {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
-			if (this.local)
-				this.terrainUpdateInterval = 30
+			data.terrainUpdateInterval = data.local ? 30 : 100
 		}
 		//
 		var obj = null
