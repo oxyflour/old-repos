@@ -123,13 +123,8 @@ function updateVector(v, fx, fy, fz, d) {
 	var to = v.to,
 		dx = to.x - v.x,
 		dy = to.y - v.y,
-		dz = to.z - v.z,
-		ds = dx*dx + dy*dy + dz*dz
-	fx = fx || 0.05
-	fy = fy || fx
-	fz = fz || fx
-	d = d || 0.0001
-	if (ds > d)
+		dz = to.z - v.z
+	if (dx*dx*fx + dy*dy*fy + dz*dz*fz > d)
 		v.set(v.x + dx*fx, v.y + dy*fy, v.z + dz*fz)
 	else
 		v.to = null
@@ -435,8 +430,8 @@ var Basic = (function(proto) {
 		p.add(v)
 
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.05, 0.000)
-		if (r.to) updateVector(r, 0.03)
+		if (p.to) updateVector(p, 0.05, 0.05, 0.00, 0.00001)
+		if (r.to) updateVector(r, 0.03, 0.03, 0.03, 0.00001)
 
 		// walk on terrain
 		if (this.terrain) {
