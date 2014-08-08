@@ -38,8 +38,6 @@ if (!window.requestAnimationFrame) {
 function render() {
 	requestAnimationFrame(render)
 	var dt = clock.getDelta()
-	THREE.AnimationHandler.update(dt)
-	game.controls.update(dt)
 	game.beforeRender(dt)
 	game.renderer.render(game.scene, game.camera)
 }

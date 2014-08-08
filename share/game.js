@@ -902,6 +902,8 @@ var Client = function(url) {
 		_t.objects.run('run', dt)
 	}
 	_t.beforeRender = function(dt) {
+		THREE.AnimationHandler.update(dt)
+		_t.controls.update(dt)
 		_t.stats.update()
 		_t.objects.run('render', dt)
 	}
