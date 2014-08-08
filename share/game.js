@@ -385,6 +385,8 @@ var Terrain = function(scene, heightMap, textureSrc) {
 }
 
 var Static = (function(proto) {
+	proto.box = null
+	//
 	return newClass(function(data) {
 		// extend data into object
 		extend(this, data)
@@ -395,16 +397,18 @@ var Static = (function(proto) {
 		)
 		if (this.terrain) {
 			// get terrain base
-			if (!this.distToTop || !this.distToBottom) {
+			if (!this.box) {
 				var m = this.mesh
 					b = new THREE.BoundingBoxHelper(m)
 				b.update()
-				this.distToTop = b.box.max.z -  m.position.z
-				this.distToBottom = m.position.z - b.box.min.z
+				this.box = aSet({ },
+					'height', b.box.max.z - b.box.min.z,
+					'toTop', b.box.max.z -  m.position.z,
+					'toBottom', m.position.z - b.box.min.z)
 			}
 			// put it on the terrain
 			var p = this.mesh.position
-			p.z = this.terrain.getHeight(p.x, p.y, 5000) + this.distToBottom
+			p.z = this.terrain.getHeight(p.x, p.y, 5000) + this.box.toBottom
 		}
 		// simply call this.onready
 		this.onready && this.onready()
@@ -442,7 +446,9 @@ var Basic = (function(proto) {
 	//
 	proto.terrainUpdateInterval = 100
 	proto.dataSyncInterval = 2000
+	//
 	proto.controls = null
+	proto.floatHeight = 0
 	proto.gravity = 0.012
 	proto.speed = 0
 	proto.angularSpeed = 0
@@ -450,7 +456,8 @@ var Basic = (function(proto) {
 		speed: 0.25,
 		angularSpeed: 0.003,
 		rotateSpeed: 0.1,
-		jumpSpeed: 6
+		jumpSpeed: 6,
+		shiftSpeed: 0.1,
 	}
 	//
 	proto.run = function(dt) {
@@ -470,7 +477,7 @@ var Basic = (function(proto) {
 			// test terrain height every 10 ticks
 			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
 				this.terrainUpdateTick = 0
-				this.terrainZ = this.terrain.getHeight(p.x, p.y, p.z + this.distToTop) + this.distToBottom
+				this.terrainZ = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop) + this.box.toBottom + this.floatHeight
 			}
 			// keep object on the ground
 			if (p.z < this.terrainZ) {
@@ -513,8 +520,17 @@ var Basic = (function(proto) {
 				mesh.rotation.z += this.angularSpeed * dt
 
 			// you can jump if on the ground
-			if (ctrl.jump && mesh.position.z == this.terrainZ)
-				mesh.velocity.z = conf.jumpSpeed
+			if (ctrl.jump) {
+				if (!this.gravity)
+					this.floatHeight += conf.shiftSpeed * dt
+				else if (mesh.position.z == this.terrainZ)
+					mesh.velocity.z = conf.jumpSpeed
+			}
+			//
+			if (ctrl.crouch) {
+				if (this.floatHeight > 0)
+					this.floatHeight = Math.max(0, this.floatHeight - conf.shiftSpeed * dt)
+			}
 		}
 	}
 	var sync = proto.sync
@@ -623,7 +639,7 @@ var W3Player = (function(proto) {
 			ctrl.moveBackward = ks.S || ks.DOWN
 			ctrl.moveLeft  = ks.A || ks.LEFT
 			ctrl.moveRight = ks.D || ks.RIGHT
-			ctrl.crouch = ks.ctrlKey
+			ctrl.crouch = ks.shiftKey
 			ctrl.jump = ks.SPACE || ks.X
 			ctrl.attack = ks.Z
 			ctrl.spell = ks.C
