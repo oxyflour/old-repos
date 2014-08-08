@@ -954,20 +954,25 @@ var Server = function(io) {
 
 	var host = null,
 		clients = { }
+
 	function setAsHost(socket) {
 		host = socket
 		socket.emit('host', getClients())
-		console.log('client ' + socket.id + ' is now hosting')
+		console.log('[h] ' + socket.id + ' is now hosting')
 	}
+
 	function pingForHost(socket) {
 		host = null
 		socket.broadcast.emit('ping')
-		console.log('waiting for a new host...')
+		console.log('[h] waiting for a new host...')
 	}
+
 	io.on('connection', function(socket) {
 		var sid = socket.id
 		clients[sid] = socket
-		console.log('client ' + sid + ' connected')
+		console.log('[c] ' + sid + ' connected')
+
+		//
 		if (!host) setAsHost(socket)
 
 		// ping!
@@ -990,12 +995,13 @@ var Server = function(io) {
 
 		// always broadcast inputs
 		socket.on('input', function(data) {
-			socket.broadcast.emit('input', data)
+			socket.broadcast.emit('input', aSet(data, 'sid', sid))
 		})
 
+		//
 		socket.on('disconnect', function() {
 			delete clients[sid]
-			console.log('client ' + sid + ' disconnected')
+			console.log('[c] ' + sid + ' disconnected')
 
 			if (host === socket)
 				pingForHost(socket)
