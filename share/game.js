@@ -414,6 +414,7 @@ var Basic = (function(proto) {
 	proto.controls = null
 	proto.floatHeight = 0
 	proto.gravity = 0.012
+	proto.canFly = false
 	proto.speed = 0
 	proto.angularSpeed = 0
 	proto.moveConfig = {
@@ -422,7 +423,7 @@ var Basic = (function(proto) {
 		rotateSpeed: 0.1,
 		jumpSpeed: 6,
 		// for flying objects
-		shiftSpeed: 0.0,
+		shiftSpeed: 0.2,
 	}
 	//
 	proto.run = function(dt) {
@@ -447,12 +448,12 @@ var Basic = (function(proto) {
 			this.terrainZ = this.terrainHeight + this.floatHeight + this.box.toBottom
 			// keep object on the ground
 			if (p.z < this.terrainZ) {
-				if (this.terrainZ - p.z < 0.01) {
+				if (this.terrainZ - p.z < 0.05) {
 					p.z = this.terrainZ
 					v.z = 0
 				}
 				else {
-					p.z = slerp(p.z, this.terrainZ, 0.5)
+					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.5)
 					v.z *= 0.5
 				}
 			}
@@ -493,9 +494,9 @@ var Basic = (function(proto) {
 
 			// you can jump if on the ground
 			if (ctrl.jump) {
-				if (conf.shiftSpeed)
+				if (this.canFly)
 					this.floatHeight += conf.shiftSpeed * dt
-				else if (p.z < this.terrainZ) {
+				else if (p.z <= this.terrainZ) {
 					p.z = this.terrainZ
 					v.z = conf.jumpSpeed
 				}
@@ -699,8 +700,7 @@ var W3Player = (function(proto) {
 					speed: 0.1,
 				},
 			}[data.name] || { }
-			if ('remilia,yuyuko'.split(',').indexOf(data.name) >= 0)
-				data.moveConfig.shiftSpeed = 0.2
+			data.canFly = 'remilia,yuyuko'.split(',').indexOf(data.name) >= 0
 			//
 			data.model = new THREE.W3Character(geometries)
 			data.mesh = data.model.root
@@ -900,6 +900,8 @@ var Client = function(url) {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
 			data.camera = data.local && _t.camera
+			if (this.local)
+				this.terrainUpdateInterval = 30
 		}
 		//
 		var obj = null
