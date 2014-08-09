@@ -22,10 +22,15 @@ function keach(ls, fn, d) {
 	}
 	return d;
 }
+function keys(data) {
+	return keach(data, function(k, v, d) {
+		d.push(k)
+	}, [ ])
+}
 function extend(data, ext) {
-	for (var k in ext)
-		data[k] = ext[k]
-	return data
+	return keach(ext, function(k, v, d) {
+		d[k] = v
+	}, data)
 }
 
 function slerp(from, to, factor) {
@@ -824,10 +829,10 @@ var Client = function(url) {
 				setInterval(function() {
 					_t.socket.emit('broadcast', getSyncData())
 				}, 2000)
-				$('body').append('<div '+
-					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
-					'you are now hosting</div>')
 			}
+			//
+			$('.status').addClass('hosting')
+			$('.clients-num').text(keys(clients).length)
 		})
 		_t.socket.on('request', function(data) {
 			if (data.action == 'join') getObject({
@@ -1014,6 +1019,7 @@ var Server = function(io) {
 
 		//
 		if (!host) setAsHost(socket)
+		host.emit('hosting', getClients())
 
 		// ping!
 		socket.on('ping', function(data) {

@@ -7,9 +7,27 @@
 		padding: 0;
 		overflow: hidden;
 	}
+	.status {
+		position: absolute;
+		left: 0;
+		top: 0;
+		background: rgba(255, 255, 255, 0.6);
+	}
+	.status div {
+		padding: 0.2em 0.5em;
+	}
+	.status .show-hosting {
+		display: none;
+	}
+	.status.hosting .show-hosting {
+		display: block;
+	}
 </style>
 </head>
 <body>
+<div class="status">
+	<div class="show-hosting">hosting (<span class="clients-num">0</span> clients)</div>
+</div>
 <script src="socket.io/socket.io.js"></script>
 <script src="js/jquery.min.js"></script>
 <script src="js/three.js"></script>
