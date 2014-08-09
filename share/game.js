@@ -444,44 +444,12 @@ var Basic = (function(proto) {
 			p = m.position,
 			r = m.rotation,
 			v = m.velocity
+			
 		p.add(v)
 
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.05, 0.00, 0.00001)
+		if (p.to) updateVector(p, 0.05, 0.05, v.z ? 0.00 : 0.05, 0.00001)
 		if (r.to) updateVector(r, 0.03, 0.03, 0.03, 0.00001)
-
-		// walk on terrain
-		if (this.terrain) {
-			// test terrain height every 10 ticks
-			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
-				this.terrainUpdateTick = 0
-				this.terrainHeight = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop)
-			}
-			this.terrainZ = this.terrainHeight + this.floatHeight + this.box.toBottom
-			// keep object on the ground
-			if (p.z < this.terrainZ) {
-				if (this.terrainZ - p.z < 0.05) {
-					p.z = this.terrainZ
-					v.z = 0
-				}
-				else {
-					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.5)
-					v.z *= 0.5
-				}
-			}
-			// add gravity if object is over the ground
-			else if (p.z > this.terrainZ) {
-				v.z -= this.gravity * dt
-			}
-		}
-
-		//
-		if (this.syncs) {
-			if (!((this.dataSyncTick += dt) < this.dataSyncInterval)) {
-				this.dataSyncTick = 0
-				this.syncs.push(this)
-			}
-		}
 
 		//
 		if (this.controls) {
@@ -504,19 +472,55 @@ var Basic = (function(proto) {
 			if (this.angularSpeed = slerp(this.angularSpeed, aspeed, 0.1))
 				mesh.rotation.z += this.angularSpeed * dt
 
-			// you can jump if on the ground
 			if (ctrl.jump) {
+				// fly higher
 				if (this.canFly)
 					this.floatHeight += conf.shiftSpeed * dt
+				// you can jump if on the ground
 				else if (p.z <= this.terrainZ) {
 					p.z = this.terrainZ
 					v.z = conf.jumpSpeed
 				}
 			}
-			//
+
 			if (ctrl.crouch) {
 				if (this.floatHeight > 0)
 					this.floatHeight = Math.max(0, this.floatHeight - conf.shiftSpeed * dt)
+			}
+		}
+
+		// walk on terrain
+		if (this.terrain) {
+
+			// test terrain height
+			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
+				this.terrainUpdateTick = 0
+				this.terrainHeight = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop)
+			}
+			this.terrainZ = this.terrainHeight + this.floatHeight + this.box.toBottom
+
+			// keep object on the ground
+			if (p.z < this.terrainZ) {
+				if (this.terrainZ - p.z < 0.05) {
+					p.z = this.terrainZ
+					v.z = 0
+				}
+				else {
+					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.5)
+					v.z *= 0.5
+				}
+			}
+			// add gravity if object is over the ground
+			else if (p.z > this.terrainZ) {
+				v.z -= this.gravity * dt
+			}
+		}
+
+		//
+		if (this.syncs) {
+			if (!((this.dataSyncTick += dt) < this.dataSyncInterval)) {
+				this.dataSyncTick = 0
+				this.syncs.push(this)
 			}
 		}
 	}
