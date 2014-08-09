@@ -812,7 +812,7 @@ var Client = function(url) {
 		_t.socket.on('ping', function(data) {
 			_t.socket.emit('ping')
 		})
-		_t.socket.on('host', function(clients) {
+		_t.socket.on('hosting', function(clients) {
 			// clear disconnected objects
 			_t.objects.forEach(function(obj) {
 				if (obj && obj.sid)
