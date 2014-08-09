@@ -785,13 +785,12 @@ var Client = function(url) {
 	// local & remote key states (the dictionary key is sid)
 	_t.keys = { }
 
-	function getSyncData(objs) {
+	function getSyncData(objects) {
 		var data = { }
-		data.action = objs ? 'sync' : 'sync-all'
-		data.objs = ieach(objs || _t.objects, function(i, obj, list) {
+		data.action = objects ? 'sync' : 'sync-all'
+		data.objects = ieach(objects || _t.objects, function(i, obj, list) {
 			if (!obj || !obj.id || obj.finished) return
 			var data = obj.sync()
-			data.finished = obj.finished
 			data.cls = obj.cls
 			data.id = obj.id
 			data.sid = obj.sid
@@ -802,7 +801,6 @@ var Client = function(url) {
 
 	function syncObject(data) {
 		var obj = getObject(data)
-		obj.finished = data.finished
 		if (obj.ready)
 			obj.sync(data)
 		return obj
@@ -815,7 +813,7 @@ var Client = function(url) {
 			_t.socket.emit('ping')
 		})
 		_t.socket.on('host', function(clients) {
-			// clear unused sessions
+			// clear disconnected objects
 			_t.objects.forEach(function(obj) {
 				if (obj && obj.sid)
 					obj.finished = !clients[obj.sid]
@@ -825,7 +823,7 @@ var Client = function(url) {
 				_t.hosting = true
 				setInterval(function() {
 					_t.socket.emit('broadcast', getSyncData())
-				}, 1000)
+				}, 2000)
 				$('body').append('<div '+
 					'style="position:absolute;left:0;top:0;padding:5px;background:rgba(255,255,255,0.5)">'+
 					'you are now hosting</div>')
@@ -841,14 +839,20 @@ var Client = function(url) {
 		})
 		_t.socket.on('broadcast', function(data) {
 			if (data.action == 'sync') {
-				data.objs.forEach(syncObject)
+				data.objects.forEach(syncObject)
 			}
 			else if (data.action == 'sync-all') {
+				data.objects.forEach(function(data) {
+					var obj = syncObject(data)
+					obj.syncing = true
+				})
 				_t.objects.forEach(function(obj) {
-					if (obj)
+					if (!obj) return
+					if (obj.syncing)
+						obj.syncing = false
+					else
 						obj.finished = true
 				})
-				data.objs.forEach(syncObject)
 			}
 		})
 		_t.socket.on('input', function(data) {
@@ -876,8 +880,9 @@ var Client = function(url) {
 
 	function getObject(data) {
 		// make sure that id is unique
-		if (_t.objIndex[data.id])
-			return _t.objIndex[data.id]
+		var obj = _t.objIndex[data.id]
+		if (obj && !obj.finished)
+			return obj
 
 		//
 		data.scene = _t.scene
@@ -898,7 +903,6 @@ var Client = function(url) {
 			data.terrainUpdateInterval = data.local ? 30 : 100
 		}
 		//
-		var obj = null
 		try {
 			obj = new this[data.cls](data)
 		}
@@ -981,7 +985,7 @@ var Client = function(url) {
 }
 
 var Server = function(io) {
-	
+
 	var host = null,
 		clients = { }
 
