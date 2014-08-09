@@ -981,7 +981,9 @@ var Client = function(url) {
 }
 
 var Server = function(io) {
-	var _t = this
+	
+	var host = null,
+		clients = { }
 
 	function getClients() {
 		return keach(clients, function(k, s, d) {
@@ -989,25 +991,22 @@ var Server = function(io) {
 		}, { })
 	}
 
-	var host = null,
-		clients = { }
-
 	function setAsHost(socket) {
 		host = socket
-		socket.emit('host', getClients())
-		console.log('[h] ' + socket.id + ' is now hosting')
+		socket.emit('hosting', getClients())
+		console.log('[H] ' + socket.id + ' is now hosting')
 	}
 
 	function pingForHost(socket) {
 		host = null
 		socket.broadcast.emit('ping')
-		console.log('[h] waiting for a new host...')
+		console.log('[H] waiting for a new host...')
 	}
 
 	io.on('connection', function(socket) {
 		var sid = socket.id
 		clients[sid] = socket
-		console.log('[c] ' + sid + ' connected')
+		console.log('[C] ' + sid + ' connected')
 
 		//
 		if (!host) setAsHost(socket)
@@ -1026,24 +1025,25 @@ var Server = function(io) {
 
 		// redirect request to host
 		socket.on('request', function(data) {
-			if (host)
-				host.emit('request', aSet(data, 'sid', sid))
+			data.sid = sid
+			host && host.emit('request', data)
 		})
 
 		// always broadcast inputs
 		socket.on('input', function(data) {
-			socket.broadcast.emit('input', aSet(data, 'sid', sid))
+			data.sid = sid
+			socket.broadcast.emit('input', data)
 		})
 
 		//
 		socket.on('disconnect', function() {
 			delete clients[sid]
-			console.log('[c] ' + sid + ' disconnected')
+			console.log('[C] ' + sid + ' disconnected')
 
 			if (host === socket)
 				pingForHost(socket)
 			else if (host)
-				host.emit('host', getClients())
+				host.emit('hosting', getClients())
 		})
 	})
 }
