@@ -269,7 +269,7 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		// segments
 		groundSegment = groundBlock / groundGrid,
 		// cached terrains
-		cached = { }
+		created = { }
 
 	var heightMapDC = getCanvas(heightMap).getContext('2d'),
 		texture = THREE.ImageUtils.loadTexture(textureSrc),
@@ -307,18 +307,21 @@ var Terrain = function(scene, heightMap, textureSrc) {
 		console.log('ground ('+i+', '+j+') at ('+gx+', '+gy+') created')
 		return ground
 	}
+	_t.getGround = function(x, y) {
+		var i = Math.floor(x / groundBlock + 0.5),
+			j = Math.floor(y / groundBlock + 0.5),
+			k = i + ',' + j
+		return created[k] || (created[k] = create(i, j))
+	}
 
 	var raycast = new THREE.Raycaster(),
 		dirDown = new THREE.Vector3(0, 0, -1)
 	_t.getHeight = function(x, y, z) {
-		var i = Math.floor(x / groundBlock + 0.5),
-			j = Math.floor(y / groundBlock + 0.5),
-			k = i + ',' + j,
-			ground = cached[k] || (cached[k] = create(i, j)),
+		var ground = _t.getGround(x, y),
 			origin = new THREE.Vector3(x, y, z || maxHeight + 1)
 		//
 		raycast.set(origin, dirDown)
-		var intersect = raycast.intersectObject(ground)
+		var intersect = raycast.intersectObject(ground, true)
 		//
 		return intersect.length ? intersect[0].point.z : 0
 	}
@@ -327,14 +330,11 @@ var Terrain = function(scene, heightMap, textureSrc) {
 	_t.checkVisible = function(x, y) {
 		var i = Math.floor(x / groundBlock + 0.5),
 			j = Math.floor(y / groundBlock + 0.5)
-		for (var k in cached)
-			cached[k].visible = false
+		for (var k in created)
+			created[k].visible = false
 		for (var m = i - 1; m <= i + 1; m ++) {
 			for (var n = j - 1; n <= j + 1; n ++) {
-				var k = m + ',' + n
-				if (!cached[k])
-					cached[k] = create(m, n)
-				cached[k].visible = true
+				_t.getGround(m*groundBlock, n*groundBlock).visible = true
 			}
 		}
 		aSet(region.min, 'x', (i-1.5)*groundBlock, 'y', (j-1.5)*groundBlock)
@@ -343,6 +343,17 @@ var Terrain = function(scene, heightMap, textureSrc) {
 	_t.isVisible = function(x, y) {
 		return x > region.min.x && x < region.max.x &&
 			y > region.min.y && y < region.max.y
+	}
+
+	_t.addMesh = function(mesh) {
+		var b = new THREE.BoundingBoxHelper(mesh)
+		b.update()
+		var p = mesh.position
+		p.z += _t.getHeight(p.x, p.y) - b.box.min.z
+		var g = _t.getGround(p.x, p.y)
+		p.x -= g.position.x
+		p.y -= g.position.y
+		g.add(mesh)
 	}
 
 	return _t
@@ -365,10 +376,11 @@ var Static = (function(proto) {
 				var m = this.mesh
 					b = new THREE.BoundingBoxHelper(m)
 				b.update()
-				this.box = aSet({ },
-					'height', b.box.max.z - b.box.min.z,
-					'toTop', b.box.max.z -  m.position.z,
-					'toBottom', m.position.z - b.box.min.z)
+				this.box = {
+					toTop: b.box.max.z -  m.position.z,
+					toBottom: m.position.z - b.box.min.z,
+					height: b.box.max.z - b.box.min.z,
+				}
 			}
 			// put it on the terrain
 			var p = this.mesh.position
@@ -963,11 +975,7 @@ var Client = function(url) {
 			var mesh = new THREE.W3Character(geometries).root
 			mesh.position.x = 1200
 			mesh.rotation.z = Math.PI
-			getObject({
-				cls: 'Static',
-				id: 'Temple',
-				mesh: mesh
-			})
+			_t.terrain.addMesh(mesh)
 		})
 
 		new ResLoader('models/mdl/sssss_01.txt', ResLoader.handleW3Char, function(geometries) {
@@ -975,11 +983,7 @@ var Client = function(url) {
 			mesh.position.x = 1000
 			mesh.position.y = 1000
 			mesh.rotation.z = Math.PI
-			getObject({
-				cls: 'Static',
-				id: 'TempleA',
-				mesh: mesh
-			})
+			_t.terrain.addMesh(mesh)
 		})
 
 		initInput()
