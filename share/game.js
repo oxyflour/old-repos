@@ -315,12 +315,24 @@ var Terrain = function(scene, heightMap, material) {
 		geometry.computeFaceNormals()
 		geometry.computeVertexNormals()
 		// then move the vertices at the edge down to hide extra faces
-		var n = segs + 1
+		var n = segs + 1, v = null
 		for (var m = 0; m < n; m ++) {
-			vertices[m].z -= 10
-			vertices[n*(n-1) + m].z -= 10
-			vertices[m*n].z -= 10
-			vertices[m*n + n-1].z -= 10
+			//
+			v = vertices[m]
+			v.z -= 100
+			v.y -= groundGrid
+			//
+			v = vertices[m*n + n-1]
+			v.z -= 100
+			v.x -= groundGrid
+			//
+			v = vertices[n*n-1 - m]
+			v.z -= 100
+			v.y += groundGrid
+			//
+			v = vertices[(n-1-m)*n]
+			v.z -= 100
+			v.x += groundGrid
 		}
 		//
 		var ground = new THREE.Mesh(geometry, material)
