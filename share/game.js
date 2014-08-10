@@ -260,9 +260,9 @@ var Terrain = function(scene, heightMap, material) {
 		// max height
 		maxHeight = heightMap.maxHeight || 1024,
 		// ground size (in pixels)
-		groundBlock = 1024*1,
+		groundBlock = 1024*4,
 		// grid size (distance between two vertex points, in pixels)
-		groundGrid = 128/4,
+		groundGrid = 128,
 		// segments
 		groundSegment = groundBlock / groundGrid,
 		// cached terrains
@@ -281,20 +281,31 @@ var Terrain = function(scene, heightMap, material) {
 			py = groundSegment * j - groundSegment / 2 + heightMap.height / 2,
 			gx = i * groundBlock,
 			gy = j * groundBlock
+		// Note: we should get extra points to calculate normals at the edge
+		var segs = groundSegment + 2
 		// Note: the order of getImageData() and geometry.vertices is reversed at y direction
 		// so we take data from the reversed y
-		py = heightMap.height - (py + groundSegment + 1)
-		var imdata = heightMapDC.getImageData(px, py, groundSegment+1, groundSegment+1).data
+		var sy = heightMap.height - (py + segs + 1)
+		var imdata = heightMapDC.getImageData(px - 1, sy - 1, segs + 1, segs + 1).data
 		//
-		var geometry = new THREE.PlaneGeometry(groundBlock, groundBlock, groundSegment, groundSegment)
+		var geometry = new THREE.PlaneGeometry(groundGrid*segs, groundGrid*segs, segs, segs),
+			vertices = geometry.vertices
 		geometry.dynamic = true
-		if (geometry.vertices.length*4 == imdata.length) {
-			ieach(geometry.vertices, function(i, v) {
+		if (vertices.length*4 == imdata.length) {
+			vertices.forEach(function(v, i) {
 				v.z = imdata[i * 4] / 255 * maxHeight
 			})
 		}
 		geometry.computeFaceNormals()
 		geometry.computeVertexNormals()
+		// then move the vertices at the edge down to hide extra faces
+		var n = segs + 1
+		for (var m = 0; m < n; m ++) {
+			vertices[m].z -= 10
+			vertices[n*(n-1) + m].z -= 10
+			vertices[m*n].z -= 10
+			vertices[m*n + n-1].z -= 10
+		}
 		//
 		var ground = new THREE.Mesh(geometry, material)
 		ground.position.set(gx, gy, 0)
