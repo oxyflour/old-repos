@@ -15,7 +15,7 @@ THREE.ShaderLib.TextureSplattingShader = {
 		},
 		{
 			maxHeight: { type:'f', value:1024 },
-			bumpTexture:  { type:'t', value:null },
+			noiseTexture:  { type:'t', value:null },
 			oceanTexture: { type:'t', value:null },
 			sandyTexture: { type:'t', value:null },
 			grassTexture: { type:'t', value:null },
@@ -30,6 +30,7 @@ THREE.ShaderLib.TextureSplattingShader = {
 		"	varying vec3 vLightBack;",
 		"#endif",,
 
+		"uniform sampler2D noiseTexture;",
 		"uniform float maxHeight;",
 		"varying float vAmount;",
 		"varying vec2 vUV;",
@@ -46,7 +47,8 @@ THREE.ShaderLib.TextureSplattingShader = {
 
 		"void main() {",
 			"vUV = uv;",
-			"vAmount = position.z / maxHeight;",
+			"float fNoise = texture2D( noiseTexture, vUV ).r - 0.5;",
+			"vAmount = position.z / maxHeight + fNoise*0.3;",
 
 			//THREE.ShaderChunk[ "map_vertex" ],
 			//THREE.ShaderChunk[ "lightmap_vertex" ],

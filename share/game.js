@@ -47,6 +47,12 @@ function aSet(d) {
 	return d
 }
 
+function newClass(create, proto) {
+	proto.create = create
+	create.prototype = proto
+	return create
+}
+
 function newTicker(t, f, d) {
 	var _t = {
 		t: t,
@@ -118,12 +124,6 @@ function updateKeyState(ks, e) {
 		ks[c] = 0
 }
 
-function newClass(create, proto) {
-	proto.create = create
-	create.prototype = proto
-	return create
-}
-
 function updateVector(v, fx, fy, fz, d) {
 	var to = v.to,
 		dx = to.x - v.x,
@@ -167,6 +167,22 @@ function reverseAnimation(anim) {
 		})
 	})
 	return a
+}
+
+function createRepeatTexture(img) {
+	var cv = document.createElement('canvas'),
+		dc = cv.getContext('2d')
+	cv.width = img.width * 2
+	cv.height = img.height * 2
+	dc.drawImage(img, 0, 0)
+	dc.scale(-1, 1)
+	dc.drawImage(img, -cv.width, 0)
+	dc.scale(1, -1)
+	dc.drawImage(img, -cv.width, -cv.height)
+	dc.scale(-1, 1)
+	dc.drawImage(img, 0, -cv.height)
+	document.body.appendChild(cv)
+	return cv
 }
 
 var THREE = this.THREE || require('three'),
@@ -990,10 +1006,18 @@ var Client = function(url) {
 	// load the height map
 	new ResLoaderBatch([
 		{ url:'textures/terrain/China.png', handle:ResLoader.handleImg },
-	], function(heightMap) {
+		{ url:'textures/splatting/heightmap-small.png', handle:ResLoader.handleImg },
+	], function(heightMap, heightNoise) {
 
-		function newWrapTexture(src) {
-			var texture = THREE.ImageUtils.loadTexture(src)
+		function newWrapTexture(img) {
+			var texture = null
+			if (typeof(img) == 'string') {
+				texture = THREE.ImageUtils.loadTexture(img)
+			}
+			else {
+				texture = new THREE.Texture(img, THREE.Texture.UVMapping)
+				texture.needsUpdate = true
+			}
 			texture.wrapS = texture.wrapT = THREE.RepeatWrapping
 			return texture
 		}
@@ -1002,19 +1026,18 @@ var Client = function(url) {
 		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
 			uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
 				maxHeight: { type:'f', value:1024 },
-				bumpTexture:  { type:'t', value:newWrapTexture('textures/splatting/heightmap.png')},
-				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg')},
-				sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg')},
-				grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg')},
-				rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg')},
-				snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg')},
+				noiseTexture: { type:'t', value:newWrapTexture(createRepeatTexture(heightNoise)) },
+				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg') },
+				sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg') },
+				grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg') },
+				rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg') },
+				snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg') },
 			}),
 			vertexShader: shader.vertexShader,
 			fragmentShader: shader.fragmentShader,
 			lights: true,
 			fog: true,
 		}))
-		_t.terrain.checkVisible(0, 0)
 
 		new ResLoader('models/mdl/blsss_01.txt', ResLoader.handleW3Char, function(geometries) {
 			var mesh = new THREE.W3Character(geometries).root
