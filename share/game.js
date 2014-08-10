@@ -687,9 +687,9 @@ var W3Player = (function(proto) {
 			this.model.playAnimation(this.anims.spell)
 		else if (ctrl.attack)
 			this.model.playAnimation(this.anims.attack)
-		else if (this.speed > 0.01 || this.speed < -0.01)
+		else if (this.speed > 0.05 || this.speed < -0.05)
 			this.model.playAnimation(this.anims.walk,
-				(this.speed > 0 ? 1 : -1) * (1 + this.speed * this.moveConfig.walkAnimSpeed))
+				(this.speed > 0 ? 1 : -1) + this.speed * this.moveConfig.walkAnimSpeed)
 		else
 			this.model.playAnimation(this.anims.stand)
 		// keep terrain visible if there is a camera with this object
@@ -723,7 +723,13 @@ var W3Player = (function(proto) {
 				list[a.name] = i
 			}
 		}
-		return animGroup
+		// use string instead of array if there is only one item
+		var anims = { }
+		for (var k in animGroup) {
+			var a = animGroup[k]
+			anims[k] = a.length ? a : a[0]
+		}
+		return anims
 	}
 	var create = proto.create
 	return newClass(function(data) {
@@ -731,19 +737,17 @@ var W3Player = (function(proto) {
 			url = 'models/mdl/'+(data.name || 'hakurei reimu')+'.txt'
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
 			//
-			geometries.forEach(function(geo) {
-				geo.animGroup = parseAnimGroup(geo.animations)
-			})
-			//
-			data.anims = geometries[0] && geometries[0].animGroup || { }
+			data.anims = geometries[0] ? parseAnimGroup(geometries[0].animations) : { }
 			data.controls = { }
 			//
-			data.moveConfig = {
-				'hakurei reimu': {
-					walkAnimSpeed: 4,
-				},
-			}[data.name] || { }
-			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.name) >= 0
+			data.nameLower = (data.name || 'hakurei reimu').toLowerCase()
+			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.nameLower) >= 0
+			if (data.nameLower == 'cirno') {
+				data.anims.walk = data.anims.walk[0]
+			}
+			else if (data.nameLower == 'hakurei reimu') {
+				data.moveConfig = { walkAnimSpeed:4 }
+			}
 			//
 			data.model = new THREE.W3Character(geometries)
 			data.mesh = data.model.root
