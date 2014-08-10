@@ -302,24 +302,12 @@ var Terrain = function(scene, heightMap, material) {
 		geometry.computeFaceNormals()
 		geometry.computeVertexNormals()
 		// then move the vertices at the edge down to hide extra faces
-		var n = segs + 1, v = null
+		var n = segs + 1, v = null, u = null, h = 30
 		for (var m = 0; m < n; m ++) {
-			//
-			v = vertices[m]
-			v.z -= 100
-			v.y -= groundGrid
-			//
-			v = vertices[m*n + n-1]
-			v.z -= 100
-			v.x -= groundGrid
-			//
-			v = vertices[n*n-1 - m]
-			v.z -= 100
-			v.y += groundGrid
-			//
-			v = vertices[(n-1-m)*n]
-			v.z -= 100
-			v.x += groundGrid
+			vertices[m        ].copy(vertices[m         + n]).z -= h
+			vertices[m*n + n-1].copy(vertices[m*n + n-1 - 1]).z -= h
+			vertices[n*n-1 - m].copy(vertices[n*n-1 - m - n]).z -= h
+			vertices[(n-1-m)*n].copy(vertices[(n-1-m)*n + 1]).z -= h
 		}
 		//
 		var ground = new THREE.Mesh(geometry, material)
@@ -687,9 +675,12 @@ var W3Player = (function(proto) {
 			this.model.playAnimation(this.anims.spell)
 		else if (ctrl.attack)
 			this.model.playAnimation(this.anims.attack)
-		else if (this.speed > 0.05 || this.speed < -0.05)
-			this.model.playAnimation(this.anims.walk,
-				(this.speed > 0 ? 1 : -1) + this.speed * this.moveConfig.walkAnimSpeed)
+		else if (this.speed > 0.05)
+			this.model.playAnimation(this.movingFast && this.anims.run || this.anims.walk,
+				 1 + this.speed * this.moveConfig.walkAnimSpeed)
+		else if (this.speed < -0.05)
+			this.model.playAnimation(this.anims.walk.pop ? this.anims.walk[0] : this.anims.walk,
+				-1 + this.speed * this.moveConfig.walkAnimSpeed)
 		else
 			this.model.playAnimation(this.anims.stand)
 		// keep terrain visible if there is a camera with this object
@@ -743,6 +734,7 @@ var W3Player = (function(proto) {
 			data.nameLower = (data.name || 'hakurei reimu').toLowerCase()
 			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.nameLower) >= 0
 			if (data.nameLower == 'cirno') {
+				data.anims.run = data.anims.walk[1]
 				data.anims.walk = data.anims.walk[0]
 			}
 			else if (data.nameLower == 'hakurei reimu') {
@@ -791,6 +783,20 @@ var Client = function(url) {
 	light.shadowCascadeWidth  = [1024, 1024, 1024]
 	light.shadowCascadeHeight = [1024, 1024, 1024]
 	_t.scene.add(light)
+
+	/*
+	var shader = THREE.ShaderLib.Sky
+	_t.sky = new THREE.Mesh(
+		new THREE.SphereGeometry(6000, 32, 15),
+		new THREE.ShaderMaterial({
+			uniforms: extend({ }, shader.uniforms),
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+			side: THREE.BackSide
+		})
+	)
+	_t.camera.add(_t.sky)
+	*/
 
 	try {
 		_t.renderer = new THREE.WebGLRenderer({ antialias:true })
@@ -1022,10 +1028,11 @@ var Client = function(url) {
 			return texture
 		}
 
+		heightMap.maxHeight = 2048
 		var shader = THREE.ShaderLib.TextureSplattingShader
 		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
 			uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
-				maxHeight: { type:'f', value:1024 },
+				maxHeight: { type:'f', value:heightMap.maxHeight },
 				noiseTexture: { type:'t', value:newWrapTexture(createRepeatTexture(heightNoise)) },
 				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg') },
 				sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg') },
