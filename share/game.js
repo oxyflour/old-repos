@@ -379,6 +379,11 @@ var Static = (function(proto) {
 			new THREE.BoxGeometry(200, 200, 200),
 			new THREE.MeshBasicMaterial({ color:'white', })
 		)
+		if (this.at) {
+			var pos = this.at.split(',').map(parseFloat)
+			this.mesh.position.x = pos[0]
+			this.mesh.position.y = pos[1]
+		}
 		if (this.terrain) {
 			// get terrain base
 			if (!this.box) {
@@ -866,6 +871,7 @@ var Client = function(url) {
 				sid: data.sid,
 				cls: 'W3Player',
 				name: data.name,
+				at: data.at,
 			})
 		})
 		_t.socket.on('broadcast', function(data) {
@@ -894,7 +900,8 @@ var Client = function(url) {
 
 		if (join) _t.socket.emit('request', {
 			action: 'join',
-			name: conf.name
+			name: conf.name,
+			at: conf.at
 		})
 	}
 

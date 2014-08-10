@@ -1,4 +1,8 @@
+// modified from http://stemkoski.github.io/Three.js/Shader-Heightmap-Textures.html
+// and THREE.ShaderLib.lambert
+
 THREE.ShaderLib.TextureSplattingShader = {
+
 	uniforms: THREE.UniformsUtils.merge([
 		THREE.UniformsLib['common'],
 		THREE.UniformsLib['fog'],
