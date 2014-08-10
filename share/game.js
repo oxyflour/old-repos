@@ -983,23 +983,17 @@ var Client = function(url) {
 	// load the height map
 	new ResLoaderBatch([
 		{ url:'textures/terrain/China.png', handle:ResLoader.handleImg },
-		{ url:'shaders/textureSplattingVertex.txt', handle:ResLoader.handleText },
-		{ url:'shaders/textureSplattingFragment.txt', handle:ResLoader.handleText },
-	], function(heightMap, vertexShader, fragmentShader) {
+	], function(heightMap) {
 
 		function newWrapTexture(src) {
 			var texture = THREE.ImageUtils.loadTexture(src)
 			texture.wrapS = texture.wrapT = THREE.RepeatWrapping
 			return texture
 		}
-		/*
-		function parseShaderText(text) {
-			return text.replace(/{{([^}]+)}}/g, function(m, s) {
-				return THREE.ShaderChunk[s] || ''
-			})
-		}
-		var material = new THREE.ShaderMaterial({
-			uniforms: {
+
+		var shader = THREE.ShaderLib.TextureSplattingShader
+		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
+			uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
 				maxHeight: { type:'f', value:1024 },
 				bumpTexture:  { type:'t', value:newWrapTexture('textures/splatting/heightmap.png')},
 				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg')},
@@ -1007,26 +1001,7 @@ var Client = function(url) {
 				grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg')},
 				rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg')},
 				snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg')},
-			},
-			vertexShader: parseShaderText(vertexShader),
-			fragmentShader: parseShaderText(fragmentShader),
-		})
-		heightMap.maxHeight = material.uniforms.maxHeight.value
-		*/
-		var shader = THREE.ShaderLib.TextureSplattingShader,
-			uniforms = THREE.UniformsUtils.clone(shader.uniforms)
-		extend(uniforms, {
-			maxHeight: { type:'f', value:1024 },
-			bumpTexture:  { type:'t', value:newWrapTexture('textures/splatting/heightmap.png')},
-			oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg')},
-			sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg')},
-			grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg')},
-			rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg')},
-			snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg')},
-		})
-
-		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
-			uniforms: uniforms,
+			}),
 			vertexShader: shader.vertexShader,
 			fragmentShader: shader.fragmentShader,
 			lights: true,
