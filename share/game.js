@@ -135,25 +135,6 @@ function updateVector(v, fx, fy, fz, d) {
 		v.to = null
 }
 
-function checkComplete(list, callback) {
-	function check() {
-		var total = 0,
-			complete = 0
-		for (var k in list) {
-			var r = list[k]
-			total ++
-			complete += r.complete ? 1 : 0
-		}
-		var process = complete / total
-
-		if (process < 1)
-			setTimeout(check, 200)
-		else
-			callback(list)
-	}
-	check()
-}
-
 function getReqsDict() {
 	return ieach(location.search.substr(1).split('&'), function(i, s, d) {
 		var st = s.split('=')
@@ -204,7 +185,7 @@ var ResLoader = function(url, handle, callback) {
 
 	if (cached[url])
 		loaded(cached[url])
-	else if (handle)
+	else 
 		handle(url, loaded)
 }
 ResLoader.handleImg = function(url, callback) {
@@ -218,8 +199,11 @@ ResLoader.handleImg = function(url, callback) {
 	}
 	check()
 }
+ResLoader.handleText = function(url, callback) {
+	$.get(url, callback).error(callback)
+}
 ResLoader.handleJSON = function(url, callback) {
-	$.get(url, callback, 'json')
+	$.get(url, callback, 'json').error(callback)
 }
 ResLoader.handleMd2Char = function(url, callback) {
 	var model = new MD2CharacterComplex()
@@ -257,26 +241,40 @@ ResLoader.handleW3Char = function(url, callback) {
 		callback(geometries)
 	})
 }
+var ResLoaderBatch = function(list, callback) {
+	var data = [ ],
+		left = list.length
+	list.forEach(function(req, idx) {
+		new ResLoader(req.url, req.handle, function(res) {
+			data[idx] = res
+			if (req.callback)
+				req.callback(res)
+			if (-- left == 0)
+				callback.apply(null, data)
+		})
+	})
+}
 
-var Terrain = function(scene, heightMap, textureSrc) {
+var Terrain = function(scene, heightMap, material) {
 	var _t = this,
 		// max height
-		maxHeight = 1024,
+		maxHeight = heightMap.maxHeight || 1024,
 		// ground size (in pixels)
-		groundBlock = 1024*4,
+		groundBlock = 1024*1,
 		// grid size (distance between two vertex points, in pixels)
-		groundGrid = 128,
+		groundGrid = 128/4,
 		// segments
 		groundSegment = groundBlock / groundGrid,
 		// cached terrains
 		created = { }
 
-	var heightMapDC = getCanvas(heightMap).getContext('2d'),
-		texture = THREE.ImageUtils.loadTexture(textureSrc),
-		material = new THREE.MeshLambertMaterial({ color:0xffffff, map:texture })
-		//material = new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true })
-	material.map.repeat.set(groundBlock / 2048, groundBlock / 2048)
-	material.map.wrapS = material.map.wrapT = THREE.RepeatWrapping
+	var heightMapDC = heightMap.getContext ? heightMap.getContext('2d') : getCanvas(heightMap).getContext('2d')
+
+	//material = new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true })
+	if (material.map) {
+		material.map.repeat.set(groundBlock / 2048, groundBlock / 2048)
+		material.map.wrapS = material.map.wrapT = THREE.RepeatWrapping
+	}
 
 	var create = function(i, j) {
 		var px = groundSegment * i - groundSegment / 2 + heightMap.width / 2,
@@ -444,7 +442,7 @@ var Basic = (function(proto) {
 			p = m.position,
 			r = m.rotation,
 			v = m.velocity
-			
+
 		p.add(v)
 
 		// simple interplotation
@@ -474,8 +472,9 @@ var Basic = (function(proto) {
 
 			if (ctrl.jump) {
 				// fly higher
-				if (this.canFly)
+				if (this.canFly) {
 					this.floatHeight += conf.shiftSpeed * dt
+				}
 				// you can jump if on the ground
 				else if (p.z <= this.terrainZ) {
 					p.z = this.terrainZ
@@ -744,7 +743,7 @@ var Client = function(url) {
 	_t.scene.fog = new THREE.Fog('rgb(172,202,247)', 3000, 6000)
 	_t.scene.add(_t.camera)
 
-	_t.scene.add(new THREE.AmbientLight(0xffffff))
+	_t.scene.add(new THREE.AmbientLight(0x555555))
 
 	var light = new THREE.DirectionalLight(0x888888, 2.25)
 	light.position.set(200, 500, 450)
@@ -971,8 +970,57 @@ var Client = function(url) {
 	}
 
 	// load the height map
-	new ResLoader('textures/terrain/China.png', ResLoader.handleImg, function(heightMap) {
-		_t.terrain = new Terrain(_t.scene, heightMap, 'textures/terrain/grasslight-big.jpg')
+	new ResLoaderBatch([
+		{ url:'textures/terrain/China.png', handle:ResLoader.handleImg },
+		{ url:'shaders/textureSplattingVertex.txt', handle:ResLoader.handleText },
+		{ url:'shaders/textureSplattingFragment.txt', handle:ResLoader.handleText },
+	], function(heightMap, vertexShader, fragmentShader) {
+
+		function newWrapTexture(src) {
+			var texture = THREE.ImageUtils.loadTexture(src)
+			texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+			return texture
+		}
+		/*
+		function parseShaderText(text) {
+			return text.replace(/{{([^}]+)}}/g, function(m, s) {
+				return THREE.ShaderChunk[s] || ''
+			})
+		}
+		var material = new THREE.ShaderMaterial({
+			uniforms: {
+				maxHeight: { type:'f', value:1024 },
+				bumpTexture:  { type:'t', value:newWrapTexture('textures/splatting/heightmap.png')},
+				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg')},
+				sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg')},
+				grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg')},
+				rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg')},
+				snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg')},
+			},
+			vertexShader: parseShaderText(vertexShader),
+			fragmentShader: parseShaderText(fragmentShader),
+		})
+		heightMap.maxHeight = material.uniforms.maxHeight.value
+		*/
+		var shader = THREE.ShaderLib.TextureSplattingShader,
+			uniforms = THREE.UniformsUtils.clone(shader.uniforms)
+		extend(uniforms, {
+			maxHeight: { type:'f', value:1024 },
+			bumpTexture:  { type:'t', value:newWrapTexture('textures/splatting/heightmap.png')},
+			oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg')},
+			sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg')},
+			grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg')},
+			rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg')},
+			snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg')},
+		})
+
+		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
+			uniforms: uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+			lights: true,
+			fogs: true,
+		}))
 		_t.terrain.checkVisible(0, 0)
 
 		new ResLoader('models/mdl/blsss_01.txt', ResLoader.handleW3Char, function(geometries) {
