@@ -96,13 +96,17 @@ THREE.ShaderLib.TextureSplattingShader = {
 		//THREE.ShaderChunk[ "logdepthbuf_pars_fragment" ],
 
 		"void main() {",
-			"vec4 water = (smoothstep(0.00, 0.15, vAmount) - smoothstep(0.15, 0.20, vAmount)) * texture2D( oceanTexture, vUV * 10.0 );",
-			"vec4 sandy = (smoothstep(0.15, 0.20, vAmount) - smoothstep(0.20, 0.30, vAmount)) * texture2D( sandyTexture, vUV * 10.0 );",
-			"vec4 grass = (smoothstep(0.20, 0.30, vAmount) - smoothstep(0.30, 0.45, vAmount)) * texture2D( grassTexture, vUV * 20.0 );",
-			"vec4 rocky = (smoothstep(0.30, 0.45, vAmount) - smoothstep(0.45, 0.70, vAmount)) * texture2D( rockyTexture, vUV * 20.0 );",
-			"vec4 snowy = (smoothstep(0.50, 0.65, vAmount))                                   * texture2D( snowyTexture, vUV * 10.0 );",
+			"float s1 = smoothstep(0.05, 0.20, vAmount);",
+			"float s2 = smoothstep(0.20, 0.30, vAmount);",
+			"float s3 = smoothstep(0.30, 0.45, vAmount);",
+			"float s4 = smoothstep(0.45, 0.70, vAmount);",
+			"vec4 water = (1. - s1) * texture2D( oceanTexture, vUV * 10.0 );",
+			"vec4 sandy = (s1 - s2) * texture2D( sandyTexture, vUV * 10.0 );",
+			"vec4 grass = (s2 - s3) * texture2D( grassTexture, vUV * 20.0 );",
+			"vec4 rocky = (s3 - s4) * texture2D( rockyTexture, vUV * 20.0 );",
+			"vec4 snowy = (s4) * texture2D( snowyTexture, vUV * 10.0 );",
 
-			"gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0) + water + sandy + grass + rocky + snowy;",
+			"gl_FragColor = water + sandy + grass + rocky + snowy;",
 
 			//THREE.ShaderChunk[ "logdepthbuf_fragment" ],
 			//THREE.ShaderChunk[ "map_fragment" ],
