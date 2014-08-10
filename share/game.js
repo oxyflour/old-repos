@@ -453,11 +453,11 @@ var Basic = (function(proto) {
 	proto.dataSyncInterval = 2000
 	//
 	proto.controls = null
-	proto.floatHeight = 0
-	proto.gravity = 0.012
+	proto.gravity = 0.0012
 	proto.canFly = false
 	proto.speed = 0
 	proto.angularSpeed = 0
+	proto.verticalSpeed = 0
 	proto.moveConfig = {
 		speed: 0.3,
 		fastSpeed: 0.6,
@@ -474,14 +474,12 @@ var Basic = (function(proto) {
 		// move!
 		var m = this.mesh,
 			p = m.position,
-			r = m.rotation,
-			v = m.velocity
-
-		p.add(v)
+			r = m.rotation
 
 		// simple interplotation
-		if (p.to) updateVector(p, 0.05, 0.05, v.z ? 0.00 : 0.05, 0.00001)
+		if (p.to) updateVector(p, 0.05, 0.05, this.verticalSpeed ? 0.00 : 0.05, 0.00001)
 		if (r.to) updateVector(r, 0.03, 0.03, 0.03, 0.00001)
+		if (this.verticalSpeed) p.z += this.verticalSpeed * dt
 
 		//
 		if (this.controls) {
@@ -501,37 +499,33 @@ var Basic = (function(proto) {
 				this.moving = this.movingFast = false
 			}
 
-			var speed = aValue(
-				ctrl.moveLeft || ctrl.moveRight, this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed,
-				ctrl.moveForward, this.movingFast ? conf.fastSpeed : conf.speed,
-				ctrl.moveBackward, -conf.speed,
-				1, 0)
+			var speed = 0
+			if (ctrl.moveLeft || ctrl.moveRight)
+				speed = this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed
+			else if (ctrl.moveForward)
+				speed = this.movingFast ? conf.fastSpeed : conf.speed
+			else if (ctrl.moveBackward)
+				speed = -conf.speed
 			if (this.speed = slerp(this.speed, speed, 0.06))
 				mesh.translateX(this.speed * dt)
 
-			var aspeed = aValue(
-				ctrl.moveLeft, conf.angularSpeed,
-				ctrl.moveRight, -conf.angularSpeed,
-				1, 0)
+			var aspeed = 0
+			if (ctrl.moveLeft)
+				aspeed = conf.angularSpeed
+			else if (ctrl.moveRight)
+				aspeed = -conf.angularSpeed
 			if (this.angularSpeed = slerp(this.angularSpeed, aspeed, 0.1))
 				mesh.rotation.z += this.angularSpeed * dt
 
-			if (ctrl.jump) {
-				// fly higher
-				if (this.canFly) {
-					this.floatHeight += conf.shiftSpeed * dt
-				}
-				// you can jump if on the ground
-				else if (p.z <= this.terrainZ) {
-					p.z = this.terrainZ
-					v.z = conf.jumpSpeed
-				}
-			}
-
-			if (ctrl.crouch) {
-				if (this.floatHeight > 0)
-					this.floatHeight = Math.max(0, this.floatHeight - conf.shiftSpeed * dt)
-			}
+			var zspeed = this.canFly ? 0 : this.verticalSpeed
+			if (ctrl.jump && this.canFly)
+				zspeed = conf.shiftSpeed
+			else if (ctrl.jump && p.z <= this.terrainZ && zspeed <= 0)
+				zspeed = conf.jumpSpeed
+			else if (ctrl.crouch && p.z > this.terrainZ)
+				zspeed = -conf.shiftSpeed
+			if (this.verticalSpeed !== zspeed)
+				this.verticalSpeed = slerp(this.verticalSpeed, zspeed, 0.1)
 		}
 
 		// walk on terrain
@@ -540,24 +534,24 @@ var Basic = (function(proto) {
 			// test terrain height
 			if (!((this.terrainUpdateTick += dt) < this.terrainUpdateInterval)) {
 				this.terrainUpdateTick = 0
-				this.terrainHeight = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop)
+				this.terrainZ = this.terrain.getHeight(p.x, p.y, p.z + this.box.toTop) + this.box.toBottom
 			}
-			this.terrainZ = this.terrainHeight + this.floatHeight + this.box.toBottom
 
 			// keep object on the ground
-			if (p.z < this.terrainZ) {
+			if (p.z < this.terrainZ || (this.canFly && this.verticalSpeed <= 0 && p.z - this.terrainZ < 5)) {
 				if (this.terrainZ - p.z < 0.05) {
 					p.z = this.terrainZ
-					v.z = 0
+					this.verticalSpeed = 0
 				}
 				else {
-					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.5)
-					v.z *= 0.5
+					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.1)
+					if (this.verticalSpeed < 0)
+						this.verticalSpeed *= 0.6
 				}
 			}
 			// add gravity if object is over the ground
-			else if (p.z > this.terrainZ) {
-				v.z -= this.gravity * dt
+			else if (p.z > this.terrainZ && !this.canFly) {
+				this.verticalSpeed -= this.gravity * dt
 			}
 		}
 
@@ -572,7 +566,6 @@ var Basic = (function(proto) {
 	var sync = proto.sync
 	proto.sync = function(data) {
 		if (data) {
-			this.floatHeight = data.floatHeight
 			var mesh = this.mesh
 			if (this.synced) {
 				mesh.position.to = new THREE.Vector3().fromArray(data.position)
@@ -584,14 +577,12 @@ var Basic = (function(proto) {
 				this.synced = true
 			}
 		}
-		else return aSet(sync.call(this),
-			'floatHeight', this.floatHeight)
+		else
+			return sync.call(this)
 	}
 	var create = proto.create
 	return newClass(function(data) {
 		create.call(this, data)
-		// add velocity
-		this.mesh.velocity = new THREE.Vector3()
 		//
 		if (this.moveConfig !== proto.moveConfig)
 			this.moveConfig = extend(extend({ }, proto.moveConfig), this.moveConfig)
@@ -749,7 +740,7 @@ var W3Player = (function(proto) {
 			//
 			data.moveConfig = {
 				'hakurei reimu': {
-					walkAnimSpeed: 3,
+					walkAnimSpeed: 4,
 				},
 			}[data.name] || { }
 			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.name) >= 0
