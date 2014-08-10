@@ -751,7 +751,7 @@ var Client = function(url) {
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
-	_t.scene.fog = new THREE.Fog('rgb(172,202,247)', 3000, 6000)
+	_t.scene.fog = new THREE.Fog(0xffffff, 3000, 6000)
 	_t.scene.add(_t.camera)
 
 	_t.scene.add(new THREE.AmbientLight(0x555555))
@@ -1005,7 +1005,7 @@ var Client = function(url) {
 			vertexShader: shader.vertexShader,
 			fragmentShader: shader.fragmentShader,
 			lights: true,
-			fogs: true,
+			fog: true,
 		}))
 		_t.terrain.checkVisible(0, 0)
 
