@@ -156,19 +156,6 @@ function getCanvas(img, sx, sy, sw, sh, w, h) {
 	return cv
 }
 
-function reverseAnimation(anim) {
-	var a = JSON.parse(JSON.stringify(anim))
-
-	var length = a.length
-	a.hierarchy.forEach(function(h) {
-		h.keys = h.keys.reverse()
-		h.keys.forEach(function(k, i) {
-			k.time = length - k.time
-		})
-	})
-	return a
-}
-
 function createRepeatTexture(img) {
 	var cv = document.createElement('canvas'),
 		dc = cv.getContext('2d')
@@ -472,12 +459,15 @@ var Basic = (function(proto) {
 	proto.speed = 0
 	proto.angularSpeed = 0
 	proto.moveConfig = {
-		speed: 0.25,
+		speed: 0.3,
+		fastSpeed: 0.6,
 		angularSpeed: 0.003,
 		rotateSpeed: 0.1,
 		jumpSpeed: 6,
 		// for flying objects
 		shiftSpeed: 0.2,
+		// animation speed
+		walkAnimSpeed: 0.8,
 	}
 	//
 	proto.run = function(dt) {
@@ -499,9 +489,21 @@ var Basic = (function(proto) {
 				conf = this.moveConfig,
 				mesh = this.mesh
 
+			if (ctrl.moveForward) {
+				if (!this.moving && (this.moving = true)) {
+					var tick = Date.now()
+					if (tick - ctrl.moveForwardTick < 500)
+						this.movingFast = true
+					ctrl.moveForwardTick = tick
+				}
+			}
+			else {
+				this.moving = this.movingFast = false
+			}
+
 			var speed = aValue(
 				ctrl.moveLeft || ctrl.moveRight, this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed,
-				ctrl.moveForward, conf.speed,
+				ctrl.moveForward, this.movingFast ? conf.fastSpeed : conf.speed,
 				ctrl.moveBackward, -conf.speed,
 				1, 0)
 			if (this.speed = slerp(this.speed, speed, 0.06))
@@ -694,10 +696,9 @@ var W3Player = (function(proto) {
 			this.model.playAnimation(this.anims.spell)
 		else if (ctrl.attack)
 			this.model.playAnimation(this.anims.attack)
-		else if (this.speed > 0.01)
-			this.model.playAnimation(this.anims.walk)
-		else if (this.speed < -0.01)
-			this.model.playAnimation(this.anims.bwalk)
+		else if (this.speed > 0.01 || this.speed < -0.01)
+			this.model.playAnimation(this.anims.walk,
+				(this.speed > 0 ? 1 : -1) * (1 + this.speed * this.moveConfig.walkAnimSpeed))
 		else
 			this.model.playAnimation(this.anims.stand)
 		// keep terrain visible if there is a camera with this object
@@ -710,7 +711,6 @@ var W3Player = (function(proto) {
 	function parseAnimGroup(animations) {
 		var animGroup = {
 			walk: [ ],
-			bwalk: 'bwalk',
 			attack: [ ],
 			spell: [ ],
 			stand: [ ],
@@ -724,6 +724,7 @@ var W3Player = (function(proto) {
 				list = animGroup.attack
 			else if (name.indexOf('spell') >= 0)
 				list = animGroup.spell
+			// don't want 'Stand Ready'
 			else if (name.indexOf('stand') >= 0 && name.indexOf('ready') < 0)
 				list = animGroup.stand
 			if (list) {
@@ -740,15 +741,7 @@ var W3Player = (function(proto) {
 		new ResLoader(url, ResLoader.handleW3Char, function(geometries) {
 			//
 			geometries.forEach(function(geo) {
-				// get animation group
-				var animGroup = geo.animGroup = parseAnimGroup(geo.animations)
-				// add reverse walking animation
-				if (animGroup.walk.length) {
-					var i = animGroup.walk[animGroup.walk[0]]
-						r = reverseAnimation(geo.animations[i])
-					r.name = 'bwalk'
-					geo.animations.push(r)
-				}
+				geo.animGroup = parseAnimGroup(geo.animations)
 			})
 			//
 			data.anims = geometries[0] && geometries[0].animGroup || { }
@@ -756,7 +749,7 @@ var W3Player = (function(proto) {
 			//
 			data.moveConfig = {
 				'hakurei reimu': {
-					speed: 0.1,
+					walkAnimSpeed: 3,
 				},
 			}[data.name] || { }
 			data.canFly = 'aya,remilia,yuyuko'.split(',').indexOf(data.name) >= 0
