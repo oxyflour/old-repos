@@ -14,8 +14,9 @@ THREE.ShaderLib.TextureSplattingShader = {
 			wrapRGB  : { type: "v3", value: new THREE.Vector3( 1, 1, 1 ) }
 		},
 		{
-			maxHeight: { type:'f', value:1024 },
-			noiseTexture:  { type:'t', value:null },
+			maxHeight: { type:'f', value:256 },
+			meshSize:  { type:'f', value:1024 },
+			heightMap: { type:'t', value:null },
 			oceanTexture: { type:'t', value:null },
 			sandyTexture: { type:'t', value:null },
 			grassTexture: { type:'t', value:null },
@@ -30,8 +31,10 @@ THREE.ShaderLib.TextureSplattingShader = {
 		"	varying vec3 vLightBack;",
 		"#endif",,
 
-		"uniform sampler2D noiseTexture;",
+		"uniform sampler2D heightMap;",
 		"uniform float maxHeight;",
+		"uniform float meshSize;",
+
 		"varying float vAmount;",
 		"varying vec2 vUV;",
 
@@ -43,13 +46,9 @@ THREE.ShaderLib.TextureSplattingShader = {
 		//THREE.ShaderChunk[ "morphtarget_pars_vertex" ],
 		//THREE.ShaderChunk[ "skinning_pars_vertex" ],
 		THREE.ShaderChunk[ "shadowmap_pars_vertex" ],
-		//THREE.ShaderChunk[ "logdepthbuf_pars_vertex" ],,
+		//THREE.ShaderChunk[ "logdepthbuf_pars_vertex" ],
 
 		"void main() {",
-			"vUV = uv;",
-			"float fNoise = texture2D( noiseTexture, vUV ).r - 0.5;",
-			"vAmount = position.z / maxHeight + fNoise*0.3;",
-
 			//THREE.ShaderChunk[ "map_vertex" ],
 			//THREE.ShaderChunk[ "lightmap_vertex" ],
 			//THREE.ShaderChunk[ "color_vertex" ],
@@ -57,11 +56,20 @@ THREE.ShaderLib.TextureSplattingShader = {
 			//THREE.ShaderChunk[ "morphnormal_vertex" ],
 			//THREE.ShaderChunk[ "skinbase_vertex" ],
 			//THREE.ShaderChunk[ "skinnormal_vertex" ],
+
 			THREE.ShaderChunk[ "defaultnormal_vertex" ],
 
 			//THREE.ShaderChunk[ "morphtarget_vertex" ],
 			//THREE.ShaderChunk[ "skinning_vertex" ],
-			THREE.ShaderChunk[ "default_vertex" ],
+
+			// replace THREE.ShaderChunk[ "default_vertex" ],
+			"vUV = position.xy / 1024.;",
+			"float fBump = texture2D( heightMap, position.xy / meshSize + 0.5 ).r;",
+			"vAmount = fBump;",
+
+			"vec4 mvPosition = modelViewMatrix * vec4( position + normal * fBump * maxHeight, 1.0);",
+			"gl_Position = projectionMatrix * mvPosition;",
+
 			//THREE.ShaderChunk[ "logdepthbuf_vertex" ],
 
 			THREE.ShaderChunk[ "worldpos_vertex" ],
@@ -102,11 +110,11 @@ THREE.ShaderLib.TextureSplattingShader = {
 			"float s2 = smoothstep(0.20, 0.30, vAmount);",
 			"float s3 = smoothstep(0.30, 0.45, vAmount);",
 			"float s4 = smoothstep(0.45, 0.70, vAmount);",
-			"vec4 water = (1. - s1) * texture2D( oceanTexture, vUV * 10.0 );",
-			"vec4 sandy = (s1 - s2) * texture2D( sandyTexture, vUV * 10.0 );",
-			"vec4 grass = (s2 - s3) * texture2D( grassTexture, vUV * 20.0 );",
-			"vec4 rocky = (s3 - s4) * texture2D( rockyTexture, vUV * 20.0 );",
-			"vec4 snowy = (s4) * texture2D( snowyTexture, vUV * 10.0 );",
+			"vec4 water = (1. - s1) * texture2D( oceanTexture, vUV );",
+			"vec4 sandy = (s1 - s2) * texture2D( sandyTexture, vUV );",
+			"vec4 grass = (s2 - s3) * texture2D( grassTexture, vUV * 2. );",
+			"vec4 rocky = (s3 - s4) * texture2D( rockyTexture, vUV * 2. );",
+			"vec4 snowy = (s4 - 0.) * texture2D( snowyTexture, vUV );",
 
 			"gl_FragColor = water + sandy + grass + rocky + snowy;",
 

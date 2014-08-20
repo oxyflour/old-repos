@@ -168,7 +168,6 @@ function createRepeatTexture(img) {
 	dc.drawImage(img, -cv.width, -cv.height)
 	dc.scale(-1, 1)
 	dc.drawImage(img, 0, -cv.height)
-	document.body.appendChild(cv)
 	return cv
 }
 
@@ -258,117 +257,155 @@ var ResLoaderBatch = function(list, callback) {
 	})
 }
 
-var Terrain = function(scene, heightMap, material) {
+var LodTerrain = function(scene, heightMap) {
 	var _t = this,
-		// max height
-		maxHeight = heightMap.maxHeight || 1024,
-		// ground size (in pixels)
-		groundBlock = 1024*4,
-		// grid size (distance between two vertex points, in pixels)
-		groundGrid = 128,
-		// segments
-		groundSegment = groundBlock / groundGrid,
-		// cached terrains
-		created = { }
+		meshGrid = 64,
+		meshCascade = [ 1024*3, 2048, 2048 ]
 
-	var heightMapDC = heightMap.getContext ? heightMap.getContext('2d') : getCanvas(heightMap).getContext('2d')
-
-	//material = new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true })
-	if (material.map) {
-		material.map.repeat.set(groundBlock / 2048, groundBlock / 2048)
-		material.map.wrapS = material.map.wrapT = THREE.RepeatWrapping
-	}
-
-	var create = function(i, j) {
-		var px = groundSegment * i - groundSegment / 2 + heightMap.width / 2,
-			py = groundSegment * j - groundSegment / 2 + heightMap.height / 2,
-			gx = i * groundBlock,
-			gy = j * groundBlock
-		// Note: we should get extra points to calculate normals at the edge
-		var segs = groundSegment + 2
-		// Note: the order of getImageData() and geometry.vertices is reversed at y direction
-		// so we take data from the reversed y
-		var sy = heightMap.height - (py + segs + 1)
-		var imdata = heightMapDC.getImageData(px - 1, sy - 1, segs + 1, segs + 1).data
+	var meshWidth = meshCascade[0] * 2,
+		maxGrid = meshGrid
+	var geometry = new THREE.PlaneGeometry(meshWidth, meshWidth, meshWidth / maxGrid, meshWidth / maxGrid)
+	geometry.dynamic = true
+	for (var i = 1; i < meshCascade.length; i ++) {
+		var padding = meshCascade[i],
+			halfWidth = meshWidth / 2
 		//
-		var geometry = new THREE.PlaneGeometry(groundGrid*segs, groundGrid*segs, segs, segs),
-			vertices = geometry.vertices
-		geometry.dynamic = true
-		if (vertices.length*4 == imdata.length) {
-			vertices.forEach(function(v, i) {
-				v.z = imdata[i * 4] / 255 * maxHeight
-			})
+		maxGrid *= 2
+		geometry.vertices.forEach(function(v, i) {
+			if (v.x == halfWidth && v.y % maxGrid)
+				v.y -= maxGrid / 2
+			else if (v.x == -halfWidth && v.y % maxGrid)
+				v.y += maxGrid / 2
+			else if (v.y == halfWidth && v.x % maxGrid)
+				v.x -= maxGrid / 2
+			else if (v.y == -halfWidth && v.x % maxGrid)
+				v.x += maxGrid / 2
+		})
+		//
+		geometry.merge(new THREE.PlaneGeometry(meshWidth + padding, padding, (meshWidth + padding) / maxGrid, padding / maxGrid),
+			new THREE.Matrix4().makeTranslation(padding / 2, (meshWidth + padding) / 2, 0))
+		geometry.merge(new THREE.PlaneGeometry(padding, meshWidth + padding, padding / maxGrid, (meshWidth + padding) / maxGrid),
+			new THREE.Matrix4().makeTranslation((meshWidth + padding) / 2, -padding / 2, 0))
+		geometry.merge(new THREE.PlaneGeometry(meshWidth + padding, padding, (meshWidth + padding) / maxGrid, padding / maxGrid),
+			new THREE.Matrix4().makeTranslation(-padding / 2, -(meshWidth + padding) / 2, 0))
+		geometry.merge(new THREE.PlaneGeometry(padding, meshWidth + padding, padding / maxGrid, (meshWidth + padding) / maxGrid),
+			new THREE.Matrix4().makeTranslation(-(meshWidth + padding) / 2, padding / 2, 0))
+		meshWidth += padding * 2
+	}
+	geometry.mergeVertices()
+
+	var maxHeight = heightMap.maxHeight || 2048,
+		heightGrid = meshGrid,
+		heightPosGrid = meshCascade[0] * 2 / 3
+	var heightMapDC = heightMap.getContext ? heightMap.getContext('2d') : getCanvas(heightMap).getContext('2d'),
+		heightCanvas = document.createElement('canvas'),
+		heightCanvasDC = heightCanvas.getContext('2d')
+	heightCanvas.width = heightCanvas.height = Math.floor(meshWidth / heightGrid)
+	function updateHeightCanvas(x, y) {
+		var ix = Math.floor(x / heightGrid),
+			iy = Math.floor(y / heightGrid)
+		heightCanvasDC.clearRect(0, 0, heightCanvas.width, heightCanvas.height)
+		heightCanvasDC.drawImage(heightMap,
+			-heightCanvas.width /2 + heightMap.width /2 + ix,
+			-heightCanvas.height/2 + heightMap.height/2 - iy,
+			heightCanvas.width,
+			heightCanvas.height,
+			0,
+			0,
+			heightCanvas.width,
+			heightCanvas.height
+		)
+	}
+	updateHeightCanvas(0, 0)
+
+	function newWrapTexture(img) {
+		var texture = null
+		if (typeof(img) == 'string') {
+			texture = THREE.ImageUtils.loadTexture(img)
 		}
-		geometry.computeFaceNormals()
-		geometry.computeVertexNormals()
-		// then move the vertices at the edge down to hide extra faces
-		var n = segs + 1, v = null, u = null, h = 30
-		for (var m = 0; m < n; m ++) {
-			vertices[m        ].copy(vertices[m         + n]).z -= h
-			vertices[m*n + n-1].copy(vertices[m*n + n-1 - 1]).z -= h
-			vertices[n*n-1 - m].copy(vertices[n*n-1 - m - n]).z -= h
-			vertices[(n-1-m)*n].copy(vertices[(n-1-m)*n + 1]).z -= h
+		else {
+			texture = new THREE.Texture(img, THREE.Texture.UVMapping)
+			texture.needsUpdate = true
 		}
-		//
-		var ground = new THREE.Mesh(geometry, material)
-		ground.position.set(gx, gy, 0)
-		ground.receiveShadow = true
-		//
-		ground.updateMatrixWorld()
-		scene.add(ground)
-		console.log('ground ('+i+', '+j+') at ('+gx+', '+gy+') created')
-		return ground
+		texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+		return texture
 	}
-	_t.getGround = function(x, y) {
-		var i = Math.floor(x / groundBlock + 0.5),
-			j = Math.floor(y / groundBlock + 0.5),
-			k = i + ',' + j
-		return created[k] || (created[k] = create(i, j))
-	}
+	var shader = THREE.ShaderLib.TextureSplattingShader
+	var material = new THREE.ShaderMaterial({
+		uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
+			maxHeight: { type:'f', value:maxHeight },
+			meshSize:  { type:'f', value:meshWidth },
+			heightMap: { type:'t', value:newWrapTexture(heightCanvas) },
+			oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg') },
+			sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg') },
+			grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg') },
+			rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg') },
+			snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg') },
+		}),
+		vertexShader: shader.vertexShader,
+		fragmentShader: shader.fragmentShader,
+		lights: true,
+		fog: true,
+		//wireframe: true,
+	})
+
+	this.mesh = new THREE.Mesh(geometry, material)
+	scene.add(this.mesh)
+	this.root = new THREE.Object3D()
+	scene.add(this.root)
 
 	var raycast = new THREE.Raycaster(),
 		dirDown = new THREE.Vector3(0, 0, -1)
-	_t.getHeight = function(x, y, z) {
-		var ground = _t.getGround(x, y),
-			origin = new THREE.Vector3(x, y, z || maxHeight + 1)
-		//
+	this.getHeight = function(x, y, z) {
+		var origin = new THREE.Vector3(x, y, z || maxHeight + 1)
 		raycast.set(origin, dirDown)
-		var intersect = raycast.intersectObject(ground, true)
-		//
-		return intersect.length ? intersect[0].point.z : 0
+		// check intersection
+		var intersect = raycast.intersectObjects(this.root.children, true)
+		if (intersect.length)
+			return intersect[0].point.z
+		// Note: take care of the pixel offset
+		var ix = Math.floor(x / heightGrid),
+			iy = Math.floor(y / heightGrid),
+			fx = x / heightGrid - ix,
+			fy = y / heightGrid - iy,
+			imdata = heightMapDC.getImageData(ix + heightMap.width / 2, heightMap.height / 2 - iy - 2, 2, 2).data
+		// bilinear interplotation
+		var lt = imdata[8], rt = imdata[12],
+			lb = imdata[0], rb = imdata[4]
+		return slerp(slerp(lt, rt, fx), slerp(lb, rb, fx), fy) / 256 * maxHeight
 	}
 
-	var region = { min:{ x:0, y:0 }, max:{ x:0, y:0 } }
-	_t.checkVisible = function(x, y) {
-		var i = Math.floor(x / groundBlock + 0.5),
-			j = Math.floor(y / groundBlock + 0.5)
-		for (var k in created)
-			created[k].visible = false
-		for (var m = i - 1; m <= i + 1; m ++) {
-			for (var n = j - 1; n <= j + 1; n ++) {
-				_t.getGround(m*groundBlock, n*groundBlock).visible = true
-			}
+	this.checkVisible = function(x, y) {
+		var p = this.mesh.position,
+			px = Math.floor(x / heightPosGrid + 0.5) * heightPosGrid,
+			py = Math.floor(y / heightPosGrid + 0.5) * heightPosGrid
+		if (p.x != px || p.y != py) {
+			//
+			updateHeightCanvas(px, py)
+			this.mesh.material.uniforms.heightMap.value.needsUpdate = true
+			//
+			this.root.children.forEach(function(obj) {
+				obj.visible = _t.isVisible(obj.position.x, obj.position.y)
+			})
+			p.x = px
+			p.y = py
 		}
-		aSet(region.min, 'x', (i-1.5)*groundBlock, 'y', (j-1.5)*groundBlock)
-		aSet(region.max, 'x', (i+1.5)*groundBlock, 'y', (j+1.5)*groundBlock)
-	}
-	_t.isVisible = function(x, y) {
-		return x > region.min.x && x < region.max.x &&
-			y > region.min.y && y < region.max.y
 	}
 
-	_t.addMesh = function(mesh) {
+	this.isVisible = function(x, y) {
+		var p = this.mesh.position,
+			h = meshWidth / 2
+		return x > p.x - h && x < p.x + h &&
+			y > p.y - h && y < p.y + h
+	}
+
+	this.addMesh = function(mesh) {
 		var b = new THREE.BoundingBoxHelper(mesh)
 		b.update()
 		var p = mesh.position
 		p.z += _t.getHeight(p.x, p.y) - b.box.min.z
-		var g = _t.getGround(p.x, p.y)
-		p.x -= g.position.x
-		p.y -= g.position.y
-		g.add(mesh)
+		this.root.add(mesh)
 	}
-
-	return _t
 }
 
 var Static = (function(proto) {
@@ -758,13 +795,13 @@ var Client = function(url) {
 
 	var conf = getReqsDict()
 
-	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 6000)
+	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 8000)
 	_t.camera.up.set(0, 0, 1)
 	_t.camera.position.set(-800, 0, 300)
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
-	_t.scene.fog = new THREE.Fog(0xffffff, 3000, 6000)
+	_t.scene.fog = new THREE.Fog(0xffffff, 4000, 8000)
 	_t.scene.add(_t.camera)
 
 	_t.scene.add(new THREE.AmbientLight(0x555555))
@@ -1011,40 +1048,9 @@ var Client = function(url) {
 
 	// load the height map
 	new ResLoaderBatch([
-		{ url:'textures/terrain/China.png', handle:ResLoader.handleImg },
-		{ url:'textures/splatting/heightmap-small.png', handle:ResLoader.handleImg },
-	], function(heightMap, heightNoise) {
-
-		function newWrapTexture(img) {
-			var texture = null
-			if (typeof(img) == 'string') {
-				texture = THREE.ImageUtils.loadTexture(img)
-			}
-			else {
-				texture = new THREE.Texture(img, THREE.Texture.UVMapping)
-				texture.needsUpdate = true
-			}
-			texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-			return texture
-		}
-
-		heightMap.maxHeight = 2048
-		var shader = THREE.ShaderLib.TextureSplattingShader
-		_t.terrain = new Terrain(_t.scene, heightMap, new THREE.ShaderMaterial({
-			uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
-				maxHeight: { type:'f', value:heightMap.maxHeight },
-				noiseTexture: { type:'t', value:newWrapTexture(createRepeatTexture(heightNoise)) },
-				oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg') },
-				sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg') },
-				grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg') },
-				rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg') },
-				snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg') },
-			}),
-			vertexShader: shader.vertexShader,
-			fragmentShader: shader.fragmentShader,
-			lights: true,
-			fog: true,
-		}))
+		{ url:'textures/terrain/China.jpg', handle:ResLoader.handleImg },
+	], function(heightMap) {
+		_t.terrain = new LodTerrain(_t.scene, heightMap)
 
 		new ResLoader('models/mdl/blsss_01.txt', ResLoader.handleW3Char, function(geometries) {
 			var mesh = new THREE.W3Character(geometries).root
