@@ -142,7 +142,7 @@ function getReqsDict() {
 	}, { })
 }
 
-function getCanvas(img, sx, sy, sw, sh, w, h) {
+function newCanvas(img, sx, sy, sw, sh, w, h) {
 	var cv = document.createElement('canvas')
 		dc = cv.getContext('2d')
 	sx = sx || 0
@@ -156,7 +156,7 @@ function getCanvas(img, sx, sy, sw, sh, w, h) {
 	return cv
 }
 
-function createRepeatTexture(img) {
+function newRepeatImage(img) {
 	var cv = document.createElement('canvas'),
 		dc = cv.getContext('2d')
 	cv.width = img.width * 2
@@ -169,6 +169,19 @@ function createRepeatTexture(img) {
 	dc.scale(-1, 1)
 	dc.drawImage(img, 0, -cv.height)
 	return cv
+}
+
+function newWrapTexture(img) {
+	var texture = null
+	if (typeof(img) == 'string') {
+		texture = THREE.ImageUtils.loadTexture(img)
+	}
+	else {
+		texture = new THREE.Texture(img, THREE.Texture.UVMapping)
+		texture.needsUpdate = true
+	}
+	texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+	return texture
 }
 
 var THREE = this.THREE || require('three'),
@@ -257,7 +270,7 @@ var ResLoaderBatch = function(list, callback) {
 	})
 }
 
-var LodTerrain = function(scene, heightMap) {
+var LodTerrain = function(scene, img) {
 	var _t = this,
 		meshGrid = 64,
 		meshCascade = [ 1024*3, 2048, 2048 ]
@@ -294,63 +307,73 @@ var LodTerrain = function(scene, heightMap) {
 	}
 	geometry.mergeVertices()
 
-	var maxHeight = heightMap.maxHeight || 2048,
+	var maxHeight = img.maxHeight || 2048,
 		heightGrid = meshGrid,
 		heightPosGrid = meshCascade[0] * 2 / 3
-	var heightMapDC = heightMap.getContext ? heightMap.getContext('2d') : getCanvas(heightMap).getContext('2d'),
-		heightCanvas = document.createElement('canvas'),
-		heightCanvasDC = heightCanvas.getContext('2d')
-	heightCanvas.width = heightCanvas.height = Math.floor(meshWidth / heightGrid)
-	function updateHeightCanvas(x, y) {
-		var ix = Math.floor(x / heightGrid),
-			iy = Math.floor(y / heightGrid)
-		heightCanvasDC.clearRect(0, 0, heightCanvas.width, heightCanvas.height)
-		heightCanvasDC.drawImage(heightMap,
-			-heightCanvas.width /2 + heightMap.width /2 + ix,
-			-heightCanvas.height/2 + heightMap.height/2 - iy,
-			heightCanvas.width,
-			heightCanvas.height,
-			0,
-			0,
-			heightCanvas.width,
-			heightCanvas.height
-		)
-	}
-	updateHeightCanvas(0, 0)
 
-	function newWrapTexture(img) {
-		var texture = null
-		if (typeof(img) == 'string') {
-			texture = THREE.ImageUtils.loadTexture(img)
-		}
-		else {
-			texture = new THREE.Texture(img, THREE.Texture.UVMapping)
-			texture.needsUpdate = true
-		}
-		texture.wrapS = texture.wrapT = THREE.RepeatWrapping
-		return texture
+	var heightMap = newCanvas(img),
+		heightMapDC = heightMap.getContext('2d'),
+		heightData = heightMapDC.getImageData(0, 0, heightMap.width, heightMap.height)
+		imdata = heightData.data
+	// in this new map, a is height and r, g, b are nomals
+	for (var i = 0; i < imdata.length; i += 4) {
+		imdata[i + 3] = imdata[i]
 	}
-	var shader = THREE.ShaderLib.TextureSplattingShader
-	var material = new THREE.ShaderMaterial({
-		uniforms: extend(THREE.UniformsUtils.clone(shader.uniforms), {
-			maxHeight: { type:'f', value:maxHeight },
-			meshSize:  { type:'f', value:meshWidth },
-			heightMap: { type:'t', value:newWrapTexture(heightCanvas) },
-			oceanTexture: { type:'t', value:newWrapTexture('textures/splatting/dirt-512.jpg') },
-			sandyTexture: { type:'t', value:newWrapTexture('textures/splatting/sand-512.jpg') },
-			grassTexture: { type:'t', value:newWrapTexture('textures/splatting/grass-512.jpg') },
-			rockyTexture: { type:'t', value:newWrapTexture('textures/splatting/rock-512.jpg') },
-			snowyTexture: { type:'t', value:newWrapTexture('textures/splatting/snow-512.jpg') },
-		}),
-		vertexShader: shader.vertexShader,
-		fragmentShader: shader.fragmentShader,
-		lights: true,
-		fog: true,
-		//wireframe: true,
-	})
+	for (var i = 0; i < imdata.length; i += 4) {
+		// compute vertex normal from r
+		var h = imdata[i + 3],
+			u = imdata[i + 4 + 3],
+			v = imdata[i + heightMap.width * 4 + 3]
+		if (u >= 0 && v >= 0) {
+			var v = new THREE.Vector3((u - h)/255*maxHeight, (v - h)/255*maxHeight, heightGrid).normalize()
+			imdata[i    ] = (v.x * 0.5 + 0.5) * 255
+			imdata[i + 1] = (v.y * 0.5 + 0.5) * 255
+			imdata[i + 2] = (v.z * 0.5 + 0.5) * 255
+		}
+	}
+	heightMapDC.putImageData(heightData, 0, 0)
 
+	var getHeightMap = (function() {
+		var cv = document.createElement('canvas'),
+			dc = cv.getContext('2d')
+		cv.width = cv.height = Math.floor(meshWidth / heightGrid)
+		return function(x, y) {
+			var ix = Math.floor(x / heightGrid),
+				iy = Math.floor(y / heightGrid),
+				sx = -cv.width /2 + heightMap.width /2 + ix,
+				sy = -cv.height/2 + heightMap.height/2 - iy
+			dc.clearRect(0, 0, cv.width, cv.height)
+			dc.drawImage(heightMap, sx, sy, cv.width, cv.height, 0, 0, cv.width, cv.height)
+			return cv
+		}
+	})()
+
+	var material = (function() {
+		var shader = THREE.ShaderLib.TextureSplattingShader,
+			uniforms = THREE.UniformsUtils.clone(shader.uniforms)
+		uniforms.maxHeight.value = maxHeight
+		uniforms.meshSize.value = meshWidth
+		uniforms.heightMap.value = newWrapTexture(getHeightMap(0, 0))
+		uniforms.oceanTexture.value = newWrapTexture('textures/splatting/dirt-512.jpg')
+		uniforms.sandyTexture.value = newWrapTexture('textures/splatting/sand-512.jpg')
+		uniforms.grassTexture.value = newWrapTexture('textures/splatting/grass-512.jpg')
+		uniforms.rockyTexture.value = newWrapTexture('textures/splatting/rock-512.jpg')
+		uniforms.snowyTexture.value = newWrapTexture('textures/splatting/snow-512.jpg')
+		return new THREE.ShaderMaterial({
+			uniforms: uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+			lights: true,
+			fog: true,
+			//wireframe: true,
+		})
+	})()
+
+	// plane mesh
 	this.mesh = new THREE.Mesh(geometry, material)
 	scene.add(this.mesh)
+
+	// this.root is used for hit test
 	this.root = new THREE.Object3D()
 	scene.add(this.root)
 
@@ -370,9 +393,9 @@ var LodTerrain = function(scene, heightMap) {
 			fy = y / heightGrid - iy,
 			imdata = heightMapDC.getImageData(ix + heightMap.width / 2, heightMap.height / 2 - iy - 2, 2, 2).data
 		// bilinear interplotation
-		var lt = imdata[8], rt = imdata[12],
-			lb = imdata[0], rb = imdata[4]
-		return slerp(slerp(lt, rt, fx), slerp(lb, rb, fx), fy) / 256 * maxHeight
+		var lt = imdata[8 + 3], rt = imdata[12 + 3],
+			lb = imdata[0 + 3], rb = imdata[4  + 3]
+		return slerp(slerp(lt, rt, fx), slerp(lb, rb, fx), fy) / 255 * maxHeight
 	}
 
 	this.checkVisible = function(x, y) {
@@ -381,7 +404,7 @@ var LodTerrain = function(scene, heightMap) {
 			py = Math.floor(y / heightPosGrid + 0.5) * heightPosGrid
 		if (p.x != px || p.y != py) {
 			//
-			updateHeightCanvas(px, py)
+			getHeightMap(px, py)
 			this.mesh.material.uniforms.heightMap.value.needsUpdate = true
 			//
 			this.root.children.forEach(function(obj) {
@@ -1048,7 +1071,7 @@ var Client = function(url) {
 
 	// load the height map
 	new ResLoaderBatch([
-		{ url:'textures/terrain/China.jpg', handle:ResLoader.handleImg },
+		{ url:'textures/terrain/China.png', handle:ResLoader.handleImg },
 	], function(heightMap) {
 		_t.terrain = new LodTerrain(_t.scene, heightMap)
 
