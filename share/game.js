@@ -272,7 +272,7 @@ var ResLoaderBatch = function(list, callback) {
 
 var LodTerrain = function(scene, img) {
 	var _t = this,
-		meshGrid = 64,
+		meshGrid = 128,
 		meshCascade = [ 1024*3, 2048, 2048 ]
 
 	var meshWidth = meshCascade[0] * 2,
@@ -310,6 +310,9 @@ var LodTerrain = function(scene, img) {
 	var maxHeight = img.maxHeight || 2048,
 		heightGrid = meshGrid,
 		heightPosGrid = meshCascade[0] * 2 / 3
+
+	// Note: make sure most of the height map pixels are on the mesh grid
+	geometry.applyMatrix(new THREE.Matrix4().makeTranslation(heightGrid / 2, heightGrid / 2, 0))
 
 	var heightMap = newCanvas(img),
 		heightMapDC = heightMap.getContext('2d'),
@@ -387,11 +390,11 @@ var LodTerrain = function(scene, img) {
 		if (intersect.length)
 			return intersect[0].point.z
 		// Note: take care of the pixel offset
-		var ix = Math.floor(x / heightGrid),
-			iy = Math.floor(y / heightGrid),
-			fx = x / heightGrid - ix,
-			fy = y / heightGrid - iy,
-			imdata = heightMapDC.getImageData(ix + heightMap.width / 2, heightMap.height / 2 - iy - 2, 2, 2).data
+		var ix = Math.floor(x / heightGrid + 0.5),
+			iy = Math.floor(y / heightGrid + 0.5),
+			fx = x / heightGrid + 0.5 - ix,
+			fy = y / heightGrid + 0.5 - iy,
+			imdata = heightMapDC.getImageData(ix + heightMap.width / 2 - 1, heightMap.height / 2 - iy - 1, 2, 2).data
 		// bilinear interplotation
 		var lt = imdata[8 + 3], rt = imdata[12 + 3],
 			lb = imdata[0 + 3], rb = imdata[4  + 3]
@@ -830,7 +833,7 @@ var Client = function(url) {
 	_t.scene.add(new THREE.AmbientLight(0x555555))
 
 	var light = new THREE.DirectionalLight(0x777777, 2.25)
-	light.position.set(0, 0, 5000)
+	light.position.set(0, 1000, 5000)
 	light.castShadow = conf.noshadow === undefined
 	light.shadowMapWidth = 1024
 	light.shadowMapHeight = 1024
