@@ -829,8 +829,8 @@ var Client = function(url) {
 
 	_t.scene.add(new THREE.AmbientLight(0x555555))
 
-	var light = new THREE.DirectionalLight(0x888888, 2.25)
-	light.position.set(200, 500, 450)
+	var light = new THREE.DirectionalLight(0x777777, 2.25)
+	light.position.set(0, 0, 5000)
 	light.castShadow = conf.noshadow === undefined
 	light.shadowMapWidth = 1024
 	light.shadowMapHeight = 1024
