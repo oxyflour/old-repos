@@ -354,8 +354,8 @@ var LodTerrain = function(scene, img) {
 	var material = (function() {
 		var shader = THREE.ShaderLib.TextureSplattingShader,
 			uniforms = THREE.UniformsUtils.clone(shader.uniforms)
-		uniforms.maxHeight.value = maxHeight
-		uniforms.meshSize.value = meshWidth
+		uniforms.heightMapScale.value = maxHeight
+		uniforms.heightMapSize.value = meshWidth
 		uniforms.heightMap.value = newWrapTexture(getHeightMap(0, 0))
 		uniforms.oceanTexture.value = newWrapTexture('textures/splatting/dirt-512.jpg')
 		uniforms.sandyTexture.value = newWrapTexture('textures/splatting/sand-512.jpg')
@@ -371,9 +371,21 @@ var LodTerrain = function(scene, img) {
 			//wireframe: true,
 		})
 	})()
+	var depthMat = (function() {
+		var shader = THREE.ShaderLib.TextureSplattingDepth,
+			uniforms = THREE.UniformsUtils.clone(material.uniforms)
+		return new THREE.ShaderMaterial({
+			uniforms: uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader,
+		})
+	})()
 
 	// plane mesh
 	this.mesh = new THREE.Mesh(geometry, material)
+	this.mesh.receiveShadow = true
+	this.mesh.castShadow = true
+	this.mesh.customDepthMaterial = depthMat
 	scene.add(this.mesh)
 
 	// this.root is used for hit test
@@ -389,6 +401,10 @@ var LodTerrain = function(scene, img) {
 		var intersect = raycast.intersectObjects(this.root.children, true)
 		if (intersect.length)
 			return intersect[0].point.z
+		else
+			return this.getHeightFromMap(x, y)
+	}
+	this.getHeightFromMap = function(x, y) {
 		// Note: take care of the pixel offset
 		var ix = Math.floor(x / heightGrid + 0.5),
 			iy = Math.floor(y / heightGrid + 0.5),
@@ -832,20 +848,20 @@ var Client = function(url) {
 
 	_t.scene.add(new THREE.AmbientLight(0x555555))
 
-	var light = new THREE.DirectionalLight(0x777777, 2.25)
-	light.position.set(0, 1000, 5000)
-	light.castShadow = conf.noshadow === undefined
-	light.shadowMapWidth = 1024
-	light.shadowMapHeight = 1024
-	light.shadowMapDarkness = 0.95
-	//light.shadowCameraVisible = true
-	light.shadowCascade = conf.noshadow === undefined
-	light.shadowCascadeCount = 3
-	light.shadowCascadeNearZ  = [-1.000, 0.995, 0.998]
-	light.shadowCascadeFarZ   = [ 0.995, 0.998, 1.000]
-	light.shadowCascadeWidth  = [1024, 1024, 1024]
-	light.shadowCascadeHeight = [1024, 1024, 1024]
-	_t.scene.add(light)
+	_t.light = new THREE.DirectionalLight(0x777777, 2.25)
+	_t.light.position.set(0, 2000, 3000)
+	_t.light.castShadow = conf.noshadow === undefined
+	_t.light.shadowMapWidth = 1024
+	_t.light.shadowMapHeight = 1024
+	_t.light.shadowMapDarkness = 0.95
+	//_t.light.shadowCameraVisible = true
+	_t.light.shadowCascade = conf.noshadow === undefined
+	_t.light.shadowCascadeCount = 3
+	_t.light.shadowCascadeNearZ  = [-1.000, 0.995, 0.998]
+	_t.light.shadowCascadeFarZ   = [ 0.996, 0.998, 1.000]
+	_t.light.shadowCascadeWidth  = [2048, 2048, 2048]
+	_t.light.shadowCascadeHeight = [2048, 2048, 2048]
+	_t.scene.add(_t.light)
 
 	/*
 	var shader = THREE.ShaderLib.Sky
@@ -876,7 +892,7 @@ var Client = function(url) {
 	_t.renderer.gammaOutput = true
 	_t.renderer.shadowMapEnabled = true
 	_t.renderer.shadowMapCascade = true
-	_t.renderer.shadowMapType = THREE.PCFSoftShadowMap
+	//_t.renderer.shadowMapType = THREE.PCFSoftShadowMap
 	//_t.renderer.shadowMapDebug = true
 	_t.renderer.setClearColor(_t.scene.fog.color, 1)
 	document.body.appendChild(_t.renderer.domElement)

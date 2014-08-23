@@ -1,6 +1,28 @@
 // modified from http://stemkoski.github.io/Three.js/Shader-Heightmap-Textures.html
 // and THREE.ShaderLib.lambert
 
+THREE.ShaderLib.TextureSplattingDepth = {
+	uniforms: {
+		heightMapScale: { type:'f', value:256 },
+		heightMapSize:  { type:'f', value:1024 },
+		heightMap: { type:'t', value:null },
+	},
+	vertexShader: [
+		"uniform sampler2D heightMap;",
+		"uniform float heightMapScale;",
+		"uniform float heightMapSize;",
+
+		"void main() {",
+			"vec4 heightData = texture2D( heightMap, position.xy / heightMapSize + 0.5 );",
+			"float fBump = heightData.a;",
+
+			"vec4 mvPosition = modelViewMatrix * vec4( position + normal * fBump * heightMapScale, 1.0);",
+			"gl_Position = projectionMatrix * mvPosition;",
+		"}",
+	].join('\n'),
+	fragmentShader: THREE.ShaderLib.depthRGBA.fragmentShader
+}
+
 THREE.ShaderLib.TextureSplattingShader = {
 
 	uniforms: THREE.UniformsUtils.merge([
@@ -14,9 +36,9 @@ THREE.ShaderLib.TextureSplattingShader = {
 			wrapRGB  : { type: "v3", value: new THREE.Vector3( 1, 1, 1 ) }
 		},
 		{
-			maxHeight: { type:'f', value:256 },
-			meshSize:  { type:'f', value:1024 },
-			heightMap: { type:'t', value:null },
+			heightMapScale: { type:'f', value:256 },
+			heightMapSize:  { type:'f', value:1024 },
+			heightMap:    { type:'t', value:null },
 			oceanTexture: { type:'t', value:null },
 			sandyTexture: { type:'t', value:null },
 			grassTexture: { type:'t', value:null },
@@ -32,8 +54,8 @@ THREE.ShaderLib.TextureSplattingShader = {
 		"#endif",,
 
 		"uniform sampler2D heightMap;",
-		"uniform float maxHeight;",
-		"uniform float meshSize;",
+		"uniform float heightMapScale;",
+		"uniform float heightMapSize;",
 
 		"varying float vAmount;",
 		"varying vec2 vUV;",
@@ -50,7 +72,7 @@ THREE.ShaderLib.TextureSplattingShader = {
 
 		"void main() {",
 			"vUV = position.xy / 1024.;",
-			"vec4 heightData = texture2D( heightMap, position.xy / meshSize + 0.5 );",
+			"vec4 heightData = texture2D( heightMap, position.xy / heightMapSize + 0.5 );",
 			"float fBump = heightData.a;",
 			"vAmount = fBump;",
 
@@ -62,21 +84,23 @@ THREE.ShaderLib.TextureSplattingShader = {
 			//THREE.ShaderChunk[ "skinbase_vertex" ],
 			//THREE.ShaderChunk[ "skinnormal_vertex" ],
 
-			// replace THREE.ShaderChunk[ "defaultnormal_vertex" ],
+			// to replace THREE.ShaderChunk[ "defaultnormal_vertex" ],
 			"vec3 objectNormal = vec3( heightData.rgb ) * 2. - 1.;",
 			"vec3 transformedNormal = normalMatrix * objectNormal;",
 
 			//THREE.ShaderChunk[ "morphtarget_vertex" ],
 			//THREE.ShaderChunk[ "skinning_vertex" ],
 
-			// replace THREE.ShaderChunk[ "default_vertex" ],
-
-			"vec4 mvPosition = modelViewMatrix * vec4( position + normal * fBump * maxHeight, 1.0);",
+			// to replace THREE.ShaderChunk[ "default_vertex" ],
+			"vec4 newPosition = vec4( position + normal * fBump * heightMapScale, 1.0);",
+			"vec4 mvPosition = modelViewMatrix * newPosition;",
 			"gl_Position = projectionMatrix * mvPosition;",
 
 			//THREE.ShaderChunk[ "logdepthbuf_vertex" ],
 
-			THREE.ShaderChunk[ "worldpos_vertex" ],
+			// to replace THREE.ShaderChunk[ "worldpos_vertex" ],
+			"vec4 worldPosition = modelMatrix * newPosition;",
+
 			//THREE.ShaderChunk[ "envmap_vertex" ],
 			THREE.ShaderChunk[ "lights_lambert_vertex" ],
 			THREE.ShaderChunk[ "shadowmap_vertex" ],
