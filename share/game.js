@@ -315,26 +315,28 @@ var LodTerrain = function(scene, img) {
 	geometry.applyMatrix(new THREE.Matrix4().makeTranslation(heightGrid / 2, heightGrid / 2, 0))
 
 	var heightMap = newCanvas(img),
-		heightMapDC = heightMap.getContext('2d'),
-		heightData = heightMapDC.getImageData(0, 0, heightMap.width, heightMap.height)
-		imdata = heightData.data
-	// in this new map, a is height and r, g, b are nomals
-	for (var i = 0; i < imdata.length; i += 4) {
-		imdata[i + 3] = imdata[i]
-	}
-	for (var i = 0; i < imdata.length; i += 4) {
-		// compute vertex normal from r
-		var h = imdata[i + 3],
-			u = imdata[i + 4 + 3],
-			v = imdata[i + heightMap.width * 4 + 3]
-		if (u >= 0 && v >= 0) {
-			var v = new THREE.Vector3((u - h)/255*maxHeight, (v - h)/255*maxHeight, heightGrid).normalize()
-			imdata[i    ] = (v.x * 0.5 + 0.5) * 255
-			imdata[i + 1] = (v.y * 0.5 + 0.5) * 255
-			imdata[i + 2] = (v.z * 0.5 + 0.5) * 255
+		heightMapDC = heightMap.getContext('2d')
+	var updateHeightMapNormal = function(x, y, w, h) {
+		var heightData = heightMapDC.getImageData(x, y, w, h)
+			imdata = heightData.data
+		// in this new map, r is height and g, b, a are nomals
+		for (var i = 0; i < imdata.length; i += 4) {
+			// compute vertex normal from r
+			var h = imdata[i],
+				l = imdata[i + 4],
+				r = imdata[i + 4],
+				t = imdata[i - heightMap.width * 4],
+				b = imdata[i + heightMap.width * 4]
+			if (l >= 0 && r >= 0 && t >= 0 && b >= 0) {
+				var n = new THREE.Vector3((r - l)/255*maxHeight, (b - t)/255*maxHeight, heightGrid).normalize()
+				imdata[i + 1] = (n.x * 0.5 + 0.5) * 255
+				imdata[i + 2] = (n.y * 0.5 + 0.5) * 255
+				imdata[i + 3] = (n.z * 0.5 + 0.5) * 255
+			}
 		}
+		heightMapDC.putImageData(heightData, x, y)
 	}
-	heightMapDC.putImageData(heightData, 0, 0)
+	updateHeightMapNormal(0, 0, heightMap.width, heightMap.height)
 
 	var getHeightMap = (function() {
 		var cv = document.createElement('canvas'),
@@ -412,8 +414,8 @@ var LodTerrain = function(scene, img) {
 			fy = y / heightGrid + 0.5 - iy,
 			imdata = heightMapDC.getImageData(ix + heightMap.width / 2 - 1, heightMap.height / 2 - iy - 1, 2, 2).data
 		// bilinear interplotation
-		var lt = imdata[8 + 3], rt = imdata[12 + 3],
-			lb = imdata[0 + 3], rb = imdata[4  + 3]
+		var lt = imdata[8], rt = imdata[12],
+			lb = imdata[0], rb = imdata[4]
 		return slerp(slerp(lt, rt, fx), slerp(lb, rb, fx), fy) / 255 * maxHeight
 	}
 
@@ -810,7 +812,7 @@ var W3Player = (function(proto) {
 				data.anims.walk = data.anims.walk[0]
 			}
 			else if (data.nameLower == 'hakurei reimu') {
-				data.moveConfig = { walkAnimSpeed:4 }
+				data.moveConfig = { walkAnimSpeed:3 }
 			}
 			//
 			data.model = new THREE.W3Character(geometries)

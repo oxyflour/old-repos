@@ -73,10 +73,10 @@ THREE.ShaderLib.TextureSplattingShader = {
 		//THREE.ShaderChunk[ "logdepthbuf_pars_vertex" ],
 
 		"void main() {",
-		
+
 			"vUV = position.xy / 1024.;",
 			"vec4 heightData = texture2D( heightMap, position.xy / heightMapSize + 0.5 );",
-			"float fBump = heightData.a;",
+			"float fBump = heightData.r;",
 			"vAmount = fBump;",
 
 			//THREE.ShaderChunk[ "map_vertex" ],
@@ -88,7 +88,7 @@ THREE.ShaderLib.TextureSplattingShader = {
 			//THREE.ShaderChunk[ "skinnormal_vertex" ],
 
 			// to replace THREE.ShaderChunk[ "defaultnormal_vertex" ],
-			"vec3 objectNormal = vec3( heightData.rgb ) * 2. - 1.;",
+			"vec3 objectNormal = vec3( heightData.gba ) * 2. - 1.;",
 			"vec3 transformedNormal = normalMatrix * objectNormal;",
 
 			//THREE.ShaderChunk[ "morphtarget_vertex" ],
