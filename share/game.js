@@ -520,17 +520,17 @@ var Basic = (function(proto) {
 	proto.dataSyncInterval = 2000
 	//
 	proto.controls = null
-	proto.gravity = 0.0012
+	proto.gravity = 0.003
 	proto.canFly = false
 	proto.speed = 0
 	proto.angularSpeed = 0
 	proto.verticalSpeed = 0
 	proto.moveConfig = {
-		speed: 0.3,
-		fastSpeed: 0.6,
+		speed: 0.4,
+		fastSpeed: 0.8,
 		angularSpeed: 0.003,
-		rotateSpeed: 0.1,
-		jumpSpeed: 6,
+		rotateSpeed: 0.2,
+		jumpSpeed: 10,
 		// for flying objects
 		shiftSpeed: 0.2,
 		// animation speed
@@ -567,12 +567,12 @@ var Basic = (function(proto) {
 			}
 
 			var speed = 0
-			if (ctrl.moveLeft || ctrl.moveRight)
-				speed = this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed
-			else if (ctrl.moveForward)
+			if (ctrl.moveForward)
 				speed = this.movingFast ? conf.fastSpeed : conf.speed
 			else if (ctrl.moveBackward)
 				speed = -conf.speed
+			if ((ctrl.moveLeft || ctrl.moveRight) && this.speed < conf.rotateSpeed && this.speed > -conf.rotateSpeed)
+				speed = this.speed > 0 ? conf.rotateSpeed : -conf.rotateSpeed
 			if (this.speed = slerp(this.speed, speed, 0.06))
 				mesh.translateX(this.speed * dt)
 
@@ -611,7 +611,7 @@ var Basic = (function(proto) {
 					this.verticalSpeed = 0
 				}
 				else {
-					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.1)
+					p.z = slerp(p.z, this.terrainZ, this.canFly ? 0.05 : 0.2)
 					if (this.verticalSpeed < 0)
 						this.verticalSpeed *= 0.6
 				}
