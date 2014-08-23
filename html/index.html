@@ -57,9 +57,7 @@ if (!window.requestAnimationFrame) {
 }
 function render() {
 	requestAnimationFrame(render)
-	var dt = clock.getDelta()
-	game.beforeRender(dt)
-	game.renderer.render(game.scene, game.camera)
+	game.render(clock.getDelta())
 }
 render()
 

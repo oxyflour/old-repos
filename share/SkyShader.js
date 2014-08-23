@@ -1,37 +1,58 @@
 // http://threejs.org/examples/webgl_materials_lightmap.html
 THREE.ShaderLib.Sky = {
-	uniforms: {
-		topColor:    { type:'c', value:new THREE.Color( 0x0077ff ) },
-		bottomColor: { type:'c', value:new THREE.Color( 0xffffff ) },
-		offset:      { type:'f', value:400 },
-		exponent:    { type:'f', value:0.6 },
-	},
+	uniforms: THREE.UniformsUtils.merge([
+		THREE.UniformsLib['fog'],
+		{
+			color:     { type:'c', value:new THREE.Color( 0x0077ff ) },
+			fogTop:    { type:'f', value:2500 },
+			fogBottom: { type:'f', value:0 },
+		}
+	]),
 
 	vertexShader: [
-		"varying vec3 vWorldPosition;",
+		"varying float vPosZ;",
 
 		"void main() {",
 
-			"vec4 worldPosition = modelMatrix * vec4( position, 1.0 );",
-			"vWorldPosition = worldPosition.xyz;",
+			"vPosZ = position.z;",
 
+			"vec4 worldPosition = modelMatrix * vec4( position, 1.0 );",
 			"gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
 
 		"}",
 	].join('\n'),
 
 	fragmentShader: [
-		"uniform vec3 topColor;",
-		"uniform vec3 bottomColor;",
-		"uniform float offset;",
-		"uniform float exponent;",
+		"uniform vec3 color;",
+		"uniform float fogTop;",
+		"uniform float fogBottom;",
 
-		"varying vec3 vWorldPosition;",
+		"varying float vPosZ;",
+
+		THREE.ShaderChunk[ "fog_pars_fragment" ],
 
 		"void main() {",
 
-			"float h = normalize( vWorldPosition + offset ).z;",
-			"gl_FragColor = vec4( mix( bottomColor, topColor, max( pow( max( h, 0.0 ), exponent ), 0.0 ) ), 1.0 );",
+			"gl_FragColor = vec4( color, 1.0 );",
+
+			"#ifdef USE_FOG",
+				"#ifdef USE_LOGDEPTHBUF_EXT",
+					"float depth = gl_FragDepthEXT / gl_FragCoord.w;",
+				"#else",
+					"float depth = gl_FragCoord.z / gl_FragCoord.w;",
+				"#endif",
+				"#ifdef FOG_EXP2",
+					"const float LOG2 = 1.442695;",
+					"float fogFactor = exp2( - fogDensity * fogDensity * depth * depth * LOG2 );",
+					"fogFactor = 1.0 - clamp( fogFactor, 0.0, 1.0 );",
+				"#else",
+					"float fogFactor = smoothstep( fogNear, fogFar, depth );",
+				"#endif",
+
+				"fogFactor *= smoothstep( fogTop, fogBottom, vPosZ );",
+
+				"gl_FragColor = mix( gl_FragColor, vec4( fogColor, gl_FragColor.w ), fogFactor);",
+			"#endif",
 
 		"}",
 	].join('\n'),

@@ -653,9 +653,6 @@ var Basic = (function(proto) {
 		//
 		if (this.moveConfig !== proto.moveConfig)
 			this.moveConfig = extend(extend({ }, proto.moveConfig), this.moveConfig)
-		// 
-		if (this.camera)
-			this.mesh.add(this.camera)
 	}, proto)
 })(new Static())
 
@@ -762,10 +759,6 @@ var W3Player = (function(proto) {
 				-1 + this.speed * this.moveConfig.walkAnimSpeed)
 		else
 			this.model.playAnimation(this.anims.stand)
-		// keep terrain visible if there is a camera with this object
-		var pos = this.mesh.position
-		if (this.camera)
-			this.terrain.checkVisible(pos.x, pos.y)
 		//
 		render.call(this, dt)
 	}
@@ -836,14 +829,15 @@ var Client = function(url) {
 	var _t = this
 
 	var conf = getReqsDict()
+	conf.viewDepth = conf.viewDepth || 8000
 
-	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, 8000)
+	_t.camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 1, conf.viewDepth + 100)
 	_t.camera.up.set(0, 0, 1)
 	_t.camera.position.set(-800, 0, 300)
 	_t.camera.lookAt(new THREE.Vector3())
 
 	_t.scene = new THREE.Scene()
-	_t.scene.fog = new THREE.Fog(0xffffff, 4000, 8000)
+	_t.scene.fog = new THREE.Fog(0xffffff, conf.viewDepth / 2, conf.viewDepth)
 	_t.scene.add(_t.camera)
 
 	_t.scene.add(new THREE.AmbientLight(0x555555))
@@ -863,19 +857,18 @@ var Client = function(url) {
 	_t.light.shadowCascadeHeight = [2048, 2048, 2048]
 	_t.scene.add(_t.light)
 
-	/*
-	var shader = THREE.ShaderLib.Sky
 	_t.sky = new THREE.Mesh(
-		new THREE.SphereGeometry(6000, 32, 15),
+		new THREE.SphereGeometry(conf.viewDepth, 16, 8),
 		new THREE.ShaderMaterial({
-			uniforms: extend({ }, shader.uniforms),
-			vertexShader: shader.vertexShader,
-			fragmentShader: shader.fragmentShader,
-			side: THREE.BackSide
+			uniforms: THREE.UniformsUtils.clone(THREE.ShaderLib.Sky.uniforms),
+			vertexShader: THREE.ShaderLib.Sky.vertexShader,
+			fragmentShader: THREE.ShaderLib.Sky.fragmentShader,
+			side: THREE.BackSide,
+			fog: true,
 		})
 	)
-	_t.camera.add(_t.sky)
-	*/
+	_t.sky.geometry.applyMatrix(new THREE.Matrix4().makeRotationX(Math.PI/2))
+	_t.camera.add(new THREE.Gyroscope().add(_t.sky))
 
 	try {
 		_t.renderer = new THREE.WebGLRenderer({ antialias:true })
@@ -894,7 +887,6 @@ var Client = function(url) {
 	_t.renderer.shadowMapCascade = true
 	//_t.renderer.shadowMapType = THREE.PCFSoftShadowMap
 	//_t.renderer.shadowMapDebug = true
-	_t.renderer.setClearColor(_t.scene.fog.color, 1)
 	document.body.appendChild(_t.renderer.domElement)
 
 	_t.stats = new Stats()
@@ -1033,12 +1025,16 @@ var Client = function(url) {
 		data.onready = function() {
 			this.ready = true
 			_t.objects.add(this)
+
+			if (this.local) {
+				_t.localObject = this
+				this.mesh.add(_t.camera)
+			}
 		}
 		//
 		if (data.cls == 'Player' || data.cls == 'W3Player') {
 			data.keys = _t.keys[data.sid] ||
 				(_t.keys[data.sid] = { })
-			data.camera = data.local && _t.camera
 			data.terrainUpdateInterval = data.local ? 30 : 100
 		}
 		//
@@ -1081,11 +1077,22 @@ var Client = function(url) {
 		//
 		_t.objects.run('run', dt)
 	}
-	_t.beforeRender = function(dt) {
+	_t.render = function(dt) {
+
 		THREE.AnimationHandler.update(dt)
+		_t.objects.run('render', dt)
+
+		if (_t.localObject && !_t.localObject.finished) {
+			var obj = _t.localObject,
+				pos = obj.mesh.position
+			_t.terrain.checkVisible(pos.x, pos.y)
+			_t.sky.material.uniforms.fogBottom = pos.z
+			_t.sky.material.uniforms.fogTop = pos.z + 2500
+		}
+
+		_t.renderer.render(_t.scene, _t.camera)
 		_t.controls.update(dt)
 		_t.stats.update()
-		_t.objects.run('render', dt)
 	}
 
 	// load the height map

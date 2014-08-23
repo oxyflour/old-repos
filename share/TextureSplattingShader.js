@@ -13,11 +13,13 @@ THREE.ShaderLib.TextureSplattingDepth = {
 		"uniform float heightMapSize;",
 
 		"void main() {",
+
 			"vec4 heightData = texture2D( heightMap, position.xy / heightMapSize + 0.5 );",
 			"float fBump = heightData.a;",
 
 			"vec4 mvPosition = modelViewMatrix * vec4( position + normal * fBump * heightMapScale, 1.0);",
 			"gl_Position = projectionMatrix * mvPosition;",
+
 		"}",
 	].join('\n'),
 	fragmentShader: THREE.ShaderLib.depthRGBA.fragmentShader
@@ -71,6 +73,7 @@ THREE.ShaderLib.TextureSplattingShader = {
 		//THREE.ShaderChunk[ "logdepthbuf_pars_vertex" ],
 
 		"void main() {",
+		
 			"vUV = position.xy / 1024.;",
 			"vec4 heightData = texture2D( heightMap, position.xy / heightMapSize + 0.5 );",
 			"float fBump = heightData.a;",
