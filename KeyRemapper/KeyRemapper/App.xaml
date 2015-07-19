@@ -1,0 +1,23 @@
+﻿<Application x:Class="KeyRemapper.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <LinearGradientBrush x:Key="BarBrush" StartPoint="0, 0" EndPoint="1, 1.2">
+            <GradientStop Offset="0" Color="White" />
+            <GradientStop Offset="0.24" Color="AliceBlue" />
+            <GradientStop Offset="0.25" Color="White" />
+            <GradientStop Offset="0.34" Color="AliceBlue" />
+            <GradientStop Offset="0.35" Color="White" />
+            <GradientStop Offset="0.38" Color="AliceBlue" />
+            <GradientStop Offset="0.39" Color="White" />
+            <GradientStop Offset="1" Color="AliceBlue" />
+        </LinearGradientBrush>
+        <VisualBrush x:Key="BkBrush">
+            <VisualBrush.Visual>
+                <Path Data="M0,100 C70,100 90,50 90,0 M80,100 C90,100 100,70 100,0 M60,100 C80,100 100,70 100,60"
+                              Stroke="AliceBlue" StrokeThickness="3" />
+            </VisualBrush.Visual>
+        </VisualBrush>
+    </Application.Resources>
+</Application>
