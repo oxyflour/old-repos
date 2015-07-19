@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<style>
+	body {
+		margin: 0;
+		padding: 0;
+		overflow: hidden;
+	}
+	.status {
+		position: absolute;
+		left: 0;
+		top: 0;
+		background: rgba(255, 255, 255, 0.6);
+	}
+	.status div {
+		padding: 0.2em 0.5em;
+	}
+	.status .show-hosting {
+		display: none;
+	}
+	.status.hosting .show-hosting {
+		display: block;
+	}
+</style>
+</head>
+<body>
+<div class="status">
+	<div class="show-hosting">hosting (<span class="clients-num">0</span> clients)</div>
+</div>
+<script src="socket.io/socket.io.js"></script>
+<script src="js/jquery.min.js"></script>
+<script src="js/three.js"></script>
+<script src="js/controls/OrbitControls.js"></script>
+<script src="js/libs/stats.min.js"></script>
+<script src="share/MD2CharacterComplex.js"></script>
+<script src="share/War3MdlLoader.js"></script>
+<script src="share/TextureSplattingShader.js"></script>
+<script src="share/SkyShader.js"></script>
+<script src="share/game.js"></script>
+<script>
+
+// start game client
+var game = new Client('/'),
+	clock = new THREE.Clock()
+
+$(window).bind('resize', function(e) {
+	game.camera.aspect = window.innerWidth / window.innerHeight
+	game.camera.updateProjectionMatrix()
+	game.renderer.setSize(window.innerWidth, window.innerHeight)
+}).trigger('resize')
+
+if (!window.requestAnimationFrame) {
+	requestAnimationFrame = function(fn) {
+		setTimeout(fn, 30)
+	}
+}
+function render() {
+	requestAnimationFrame(render)
+	game.render(clock.getDelta())
+}
+render()
+
+setInterval(function() {
+	game.run(10)
+}, 10)
+
+</script>
+</body>
+</html>
