@@ -1,0 +1,929 @@
+﻿<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" ng-app="app">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title to-local>:title:apm</title>
+    <link rel="stylesheet" href="css/custom-theme/jquery-ui-1.10.3.custom.css" type="text/css" />
+    <link rel="stylesheet" href="css/bootstrap.min.css" type="text/css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            padding-top: 70px;
+        }
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* this help hide elements with ng-show/ng-hide when loading */
+        .ng-hide {
+            display: none !important;
+        }
+
+        /* this fixed display issue in dialogs */
+        .ui-dialog .ui-dialog-content {
+            overflow-x: hidden;
+        }
+
+        .login {
+            max-width: 330px;
+            padding: 15px;
+            margin: 0 auto;
+        }
+        .login .title {
+            margin-top: 10px;
+            margin-bottom: 20px;
+        }
+        .login .form-control {
+            position: relative;
+            font-size: 16px;
+            height: auto;
+            padding: 10px;
+            -webkit-box-sizing: border-box;
+            -moz-box-sizing: border-box;
+            box-sizing: border-box;
+        }
+        .login .form-control:focus {
+            z-index: 2;
+        }
+        .login input[type=text] {
+            margin-bottom: -1px;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .login input[type=password] {
+            margin-bottom: 10px;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+        .login input[type=submit] {
+            margin: 20px 0;
+        }
+
+        .book .ui-datepicker {
+            font-size: 110%;
+        }
+        .book .date {
+            position: absolute;
+            width: 240px;
+        }
+        .book .res {
+            min-height: 250px;
+            margin-left: 280px;
+        }
+        .book .table {
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+        }
+        .book .table thead {
+            white-space: nowrap;
+        }
+        .book .table .day {
+            width: 13%;
+        }
+        .book .table .span {
+            color: #aaa;
+            overflow: hidden;
+            border: 1px solid transparent;
+            border-bottom-color: #eee;
+        }
+        .book .table .content {
+            margin: 5px;
+        }
+        .book .table .inc {
+            padding: 1em 0.5em;
+            margin: -1em;
+            line-height: 2.5em;
+        }
+        .book .table .span.ui-state-hover {
+            border-top-color: #ddd;
+            border-bottom-color: #ddd;
+        }
+        .book .table .span.ui-state-active {
+            color: #555;
+            font-weight: bold;
+        }
+        .book .table .span.special {
+            border-bottom-color: #ddd;
+            border-bottom-width: 2px;
+        }
+        .book .tab-content {
+            margin: 20px 10px;
+        }
+    </style>
+</head>
+<body ng-controller="main">
+<div class="container login ng-hide" ng-hide="user.info||user.autologin">
+    <form ng-submit="user.login()">
+        <div class="div-h40px"></div>
+        <h2 class="title" to-local>Sign in</h2>
+        <div class="div-h10px"></div>
+        <input class="form-control" placeholder="Username"
+            ng-model="user.username" type="text" required autofocus local-store />
+        <input class="form-control" placeholder="Password"
+            ng-model="user.password" type="password" required />
+        <div class="alert alert-warning" ng-show="user.msg">
+            <b>Hi!</b> {{user.msg | toLocal}}
+        </div>
+        <input class="btn btn-lg btn-primary btn-block" type="submit" value="{{'Login' | toLocal}}" />
+    </form>
+</div>
+<div class="navbar navbar-inverse navbar-fixed-top ng-hide" ng-show="user.info">
+    <div class="container">
+        <div class="collapse navbar-collapse">
+            <ul class="nav navbar-nav">
+                <li ng-class="{active:path=='/book'}"><a ng-href="#/book" to-local>Book</a></li>
+                <li ng-class="{active:path=='/admin'}" ng-show="user.info.admin"><a ng-href="#/admin" to-local>Admin</a></li>
+                <li ng-class="{active:path=='/help'}"><a ng-href="#/help" to-local>Help</a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+                <li class="dropdown">
+                    <a href="" data-toggle="dropdown">
+                        {{user.info.name}}
+                        <b class="caret"></b>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a href="" ng-click="user.select(user.info)" to-local>Edit My Profile</a></li>
+                        <li><a href="" ng-click="user.logout()" to-local>Logout</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+<div class="container book ng-hide" ng-show="path=='/book'">
+    <div class="date" ui-datepicker
+        ui-datepicker-bind="table.date"
+        ui-datepicker-conf="table.conf.datepicker"></div>
+    <div class="res">
+        <ul class="nav nav-tabs">
+            <li ng-repeat="item in res.data"
+                ng-class="{active:res.selected==item.id}" ng-click="res.selected=item.id">
+                <a no-nav href="#">{{item.name}}</a>
+            </li>
+        </ul>
+        <div class="tab-content">
+            <div class="tab-pane" ng-class="{active:!res.selected}" id="res_def">
+                <h4 to-local>Please select a device</h4>
+            </div>
+        </div>
+        <div class="tab-content">
+            <div class="tab-pane" ng-repeat="item in res.data" ng-class="{active:res.selected==item.id}">
+                <p><b><span to-local>address</span>: {{item.addr}}</b></p>
+                <p ng-repeat="line in item.desp.split('\\n')">{{line}}</p>
+            </div>
+        </div>
+    </div>
+    <table class="table col-sm-12" ng-show="res.selected > 0">
+        <thead>
+        <tr>
+            <th><a no-nav href="#" class="inc" ng-click="table.addDays(-7)">&lt;</a></th>
+            <th class="day" ng-repeat="date in table.dates">
+                <ul class="nav nav-pills">
+                    <li ng-class="{active:table.date==date}">
+                        <a no-nav href="#" ng-click="table.date=date">
+                            {{table.week[date]}} ({{table.conf.day_names[$index] | toLocal}})
+                        </a>
+                    </li>
+                </ul>
+            </th>
+            <th><a no-nav href="#" class="inc" ng-click="table.addDays(+7)">&gt;</a></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td></td>
+            <td class="day" ng-repeat="date in table.dates">
+                <ul range-select range-select-class="ui-state-highlight">
+                    <li class="span"
+                        ng-repeat="node in table.data[date]"
+                        ng-class="{
+                            special: table.conf.special_time[node.end],
+                            'ui-state-disabled':node.disabled,
+                            'ui-state-hover':node.uid,
+                            'ui-state-active':node.uid==user.info.id}"
+                        ng-style="{height:(node.end-node.begin)*0.5}"
+                        ng-mousedown="table.select0=node"
+                        ng-mouseup="table.select(table.select0, node)">
+                        <div class="content" ng-if="node.uid">
+                            <div>{{node.username}} ({{node.begin | mm2HHmm}}~{{node.end | mm2HHmm}})</div>
+                            <div>{{node.reason}}</div>
+                        </div>
+                    </li>
+                </ul>
+            </td>
+            <td></td>
+        </tr>
+        </tbody>
+    </table>
+    <div class="col-sm-12" ng-hide="res.selected > 0">
+        <div class="jumbotron">
+            <h2 to-local>:nt:Notice Title</h2>
+            <p ng-include="'inc/notice.html'">Notice content here</p>
+        </div>
+    </div>
+</div>
+<div class="container ng-hide" ng-show="path=='/admin'">
+    <div class="col-sm-4">
+        <h3 to-local>All Users</h3>
+        <ul class="list-group">
+            <li class="list-group-item" ng-repeat="person in user.data">
+                <a no-nav href="#" ng-click="user.select(person)">{{person.username}} ({{person.name}})</a>
+                <div class="pull-right">
+                    <span ng-if="person.admin" class="label label-info">admin</span>
+                    <span ng-if="person.reslist" class="label label-warning">restricted</span>
+                </div>
+            </li>
+        </ul>
+        <button class="btn" ng-click="user.select({})" to-local>Add</button>
+    </div>
+</div>
+<div class="diag-user ng-hide" ui-dialog ng-show="user.edit"
+    ui-diag-width="400px" ui-diag-title="{{'Edit User Information' | toLocal}}">
+    <form class="form-horizontal">
+        <h4 ng-show="user.edit.id">{{user.edit.username}}</h4>
+        <div class="form-group" ng-hide="user.edit.id">
+            <label class="col-sm-3 control-label" to-local>Username</label>
+            <div class="col-sm-9">
+                <input class="form-control" placeholder="username" type="text" ng-model="user.edit.username" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" to-local>Name</label>
+            <div class="col-sm-9">
+                <input class="form-control" placeholder="Enter your Name" type="text" ng-model="user.edit.name" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" to-local>Contact</label>
+            <div class="col-sm-9">
+                <input class="form-control" placeholder="Enter your Contact" type="text" ng-model="user.edit.contact" />
+            </div>
+        </div>
+        <div class="form-group" ng-show="user.edit.id">
+            <div class="col-sm-offset-3 col-sm-9">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox" ng-model="user.edit.change_pwd" /> 
+                        <span to-local>Change Password</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div ng-show="user.edit.change_pwd">
+            <div class="form-group">
+                <label class="col-sm-3 control-label" to-local>Password</label>
+                <div class="col-sm-9">
+                    <input class="form-control" placeholder="Enter Password" type="password" ng-model="user.edit.password" />
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label" to-local>Password</label>
+                <div class="col-sm-9">
+                    <input class="form-control" placeholder="Confirm Password" type="password" ng-model="user.edit.password2" />
+                </div>
+            </div>
+        </div>
+        <div class="form-group" ng-show="user.edit.id && user.info.admin">
+            <div class="col-sm-offset-3 col-sm-9" ng-show="user.edit.id != user.info.id">
+                <div class="checkbox">
+                    <label>
+                        <input type="checkbox" ng-model="user.edit.change_permission" /> 
+                        <span to-local>Edit Permissions</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div ng-show="user.edit.change_permission">
+            <div class="form-group">
+                <label class="col-sm-3 control-label" to-local>Permission Level</label>
+                <div class="col-sm-9">
+                    <select class="form-control" ng-model="user.edit.admin">
+                        <option value="0" to-local>:pl:normal</option>
+                        <option value="1" to-local>:pl:administrator</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="col-sm-3 control-label" to-local>Access Control</label>
+                <div class="col-sm-9">
+                    <select class="form-control" ng-model="user.edit.resctrl">
+                        <option value="" to-local>:ac:undefined</option>
+                        <option value="+" to-local>:ac:only allow</option>
+                        <option value="-" to-local>:ac:only disallow</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group" ng-show="user.edit.resctrl">
+                <div class="col-sm-offset-3 col-sm-9">
+                    <div ng-repeat="item in res.data">
+                        <input type="checkbox" ng-model="user.edit.resdict[item.id]" /> 
+                        <span>{{item.name}}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="alert alert-warning" ng-show="user.edit.confirm_del">
+            <span to-local>:cd:Click</span> 
+            <a no-nav href="#" class="alert-link" ng-click="user.remove()" to-local>here</a> 
+            <span to-local>:cd:to Delete</span>
+            <a no-nav class="close" ng-click="user.edit.confirm_del=false" href="#">&times;</a>
+        </div>
+        <div class="alert alert-danger" ng-show="user.edit.msg">
+            <b>Error!</b> {{user.edit.msg | toLocal}}
+        </div>
+        <div class="form-group">
+            <div class="col-sm-12">
+                <div class="pull-right">
+                    <button class="btn btn-default" ng-hide="user.edit.id" ng-click="user.add()" to-local>Add</button>
+                    <button class="btn btn-default" ng-show="user.edit.id" ng-click="user.update()" to-local>Update</button>
+                    <button class="btn" ng-show="user.edit.id && user.edit.id!=user.info.id"
+                        ng-click="user.edit.confirm_del=true" to-local>Delete</button>
+                    <button class="btn" ng-click="user.edit=undefined" to-local>Cancel</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="diag-table ng-hide" ui-dialog ng-show="table.edit"
+    ui-diag-width="420px" ui-diag-title="{{'Book' | toLocal}}">
+    <form class="form-horizontal" form-enable="table.edit.can_edit">
+        <h4 class="title">{{table.week[table.edit.date]}} {{table.edit.username}}</h4>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" to-local>Time</label>
+            <div class="col-sm-4">
+                <input class="form-control" type="time" ng-model="table.edit.beginHHmm" date-to-mm="table.edit.begin" />
+            </div>
+            <label class="col-sm-1">~</label>
+            <div class="col-sm-4">
+                <input class="form-control" type="time" ng-model="table.edit.endHHmm" date-to-mm="table.edit.end" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" to-local>Contact</label>
+            <div class="col-sm-9">
+                <input class="form-control" placeholder="Enter your Phone Number" type="text" ng-model="table.edit.contact" />
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="col-sm-3 control-label" to-local>Usage</label>
+            <div class="col-sm-9">
+                <textarea class="form-control" placeholder="Enter usage" rows=4 ng-model="table.edit.reason"></textarea>
+            </div>
+        </div>
+        <div class="alert alert-warning" ng-show="table.edit.confirm_del">
+            <span to-local>:cd:Click</span> 
+            <a no-nav href="#" class="alert-link" ng-click="table.remove()" to-local>here</a> 
+            <span to-local>:cd:to Delete</span>
+            <a no-nav class="close" ng-click="table.edit.confirm_del=false" href="#">&times;</a>
+        </div>
+        <div class="alert alert-warning" ng-hide="table.edit.can_edit">
+            <b>Warning!</b> <span to-local>you can not book at this time</span>
+        </div>
+        <div class="alert alert-danger" ng-show="table.edit.msg">
+            <b>Error!</b> {{table.edit.msg | toLocal}}
+        </div>
+        <div class="form-group">
+            <div class="col-sm-12">
+                <div class="pull-right">
+                    <span ng-show="table.edit.can_edit">
+                        <button class="btn btn-default" ng-hide="table.edit.id" ng-click="table.add()" to-local>Add</button>
+                        <button class="btn btn-default" ng-show="table.edit.id" ng-click="table.update()" to-local>Update</button>
+                        <button class="btn" ng-show="table.edit.id" ng-click="table.edit.confirm_del=true" to-local>Delete</button>
+                    </span>
+                    <button class="btn" ng-click="table.edit=undefined" to-local>Cancel</button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<script src="js/jquery-2.1.0.min.js"></script>
+<script src="js/jquery-ui-1.9.2.custom.min.js"></script>
+<script src="js/angular.min.js"></script>
+<script src="js/bootstrap.min.js"></script>
+<script src="js/local_zh-cn.js"></script>
+<script>
+function ieach(ls, fn, d) {
+    for (var i = 0, n = ls.length, r = undefined; i < n && r === undefined; i++)
+        r = fn.call(ls, i, ls[i], d);
+    return r === undefined ? d : r;
+}
+function keach(dt, fn, d) {
+    var r = undefined;
+    for (var k in dt) {
+        r = fn.call(dt, k, dt[k], d);
+        if (r !== undefined)
+            return r;
+    }
+    return d;
+}
+function range(end, begin, step, fn) {
+    var ls = [];
+    for (var i = begin || 0; i < end; i += (step || 1))
+        ls.push(fn ? fn(i) : i);
+    return ls;
+}
+function mm2HHmm(mm) {
+    var h = Math.floor(mm / 60),
+        m = mm - h * 60,
+        st = (h > 9 ? '' : '0') + h + ':' + (m > 9 ? '' : '0') + m;
+    return st;
+}
+function hhmm2Mm(hhmm) {
+    var st = hhmm.split(':'),
+        t = parseInt(st[0], 10)*60 + parseInt(st[1], 10);
+    return t;
+}
+function i18n(s) {
+    var st = window.local_strings;
+    return st && st[s] || (s && s[0] == ':' ? s.replace(/^:\w+:/, '') : s);
+}
+
+var app = angular.module('app', []);
+app.factory('apmSrv', function ($http) {
+    return {
+        exec: function (method, data, success, error) {
+            error = error || function (e) {
+                console.log('[x] ' + e);
+            };
+            $http.post('apmSrv.asmx/' + method, data).success(function (data) {
+                if (data.d.error)
+                    error(data.d.error);
+                else
+                    success(data.d.data);
+            }).error(function (data) {
+                error('server error '+(data.Message ? '('+data.Message+')' : ''));
+            });
+        },
+        execBatch: function(ls, i, success, error) {
+            var that = this,
+                data = ls[i];
+            if (data) that.exec(data.method, data.data, function(d) {
+                data.success && data.success(d);
+                success && success(d, data);
+                that.execBatch(ls, i+1, success, error);
+            }, function(e) {
+                data.error && data.error(e);
+                error && error(e, data);
+                that.execBatch(ls, i+1, success, error);
+            })
+        }
+    }
+});
+app.filter('mm2HHmm', function(){
+    return mm2HHmm;
+});
+app.filter('toLocal', function(){
+    return i18n;
+});
+app.directive('noNav', function () {
+    return function (scope, elem, attrs, ctrl) {
+        elem.click(function(e) {
+            e.preventDefault();
+        })
+    };
+});
+app.directive('toLocal', function () {
+    return function (scope, elem, attrs, ctrl) {
+        elem.html(i18n(elem.html()));
+    };
+});
+app.directive('formEnable', function () {
+    return function (scope, elem, attrs, ctrl) {
+        scope.$watch(attrs.formEnable, function(v) {
+            var e = elem.find('input, textarea');
+            v ? e.removeAttr('disabled') : e.attr('disabled', 'disabled');
+        })
+    };
+});
+app.directive('dateToMm', function () {
+    return {
+        require: 'ngModel',
+        scope: {
+            date: '=ngModel',
+            minutes: '=dateToMm',
+        },
+        link: function (scope, elem, attrs, ctrl) {
+            scope.$watch('minutes', function(v, v0) {
+                if (v !== v0 && v > 0)
+                    scope.date = mm2HHmm(v);
+            });
+            scope.$watch('date', function(v, v0) {
+                if (v !== v0) {
+                    if (v)
+                        scope.minutes = hhmm2Mm(v);
+                    else if (scope.minutes > 0)
+                        scope.date = mm2HHmm(scope.minutes);
+                }
+            })
+        },
+    };
+});
+app.directive('localStore', function() {
+    return {
+        require: 'ngModel',
+        scope: {
+            model: '=ngModel',
+            key: '@localStore',
+        },
+        link: function (scope, elem, attrs, ctrl) {
+            scope.$watch('model', function(v, v0) {
+                var k = scope.key || attrs.ngModel;
+                if (v == v0)
+                    scope.model = localStorage.getItem(k);
+                else
+                    v ? localStorage.setItem(k, v) : localStorage.removeItem(k);
+            });
+        },
+    };
+});
+app.directive('rangeSelect', function () {
+    return function (scope, elem, attrs, ctrl) {
+        var chiCls = attrs.rangeSelectChildren || 'span',
+            selCls = attrs.rangeSelectClass || 'selected';
+        function mouseover(e) {
+            ieach(elem.children(), function(i, e, d) {
+                var $e = $(e),
+                    a = e === d.over,
+                    b = $e.hasClass('first');
+                if ((a && !b) || (!a && b))
+                    d.select = !d.select;
+                if (a || b || d.select)
+                    $e.addClass(selCls);
+                else
+                    $e.removeClass(selCls);
+            }, { over: this })
+        }
+        function mouseup(e) {
+            elem.undelegate('>.'+chiCls, 'mouseover', mouseover);
+            $(document).unbind('mouseup', mouseup);
+        }
+        elem.delegate('>.'+chiCls, 'mousedown', function(e) {
+            $('.'+chiCls+'.'+selCls).removeClass(selCls+' first');
+            $(this).addClass(selCls+' first');
+
+            elem.delegate('>.'+chiCls, 'mouseover', mouseover)
+            $(document).bind('mouseup', mouseup)
+        })
+    };
+});
+app.directive('uiDialog', function () {
+    function keypress(e) {
+        if(e.keyCode == 13 && !$(e.target).is('textarea')) {
+            $this.parent().find('button.btn-default:visible').click();
+            e.preventDefault();
+        }
+    }
+    return function (scope, elem, attrs, ctrl) {
+        elem.dialog({
+            width: attrs.uiDiagWidth,
+            title: attrs.uiDiagTitle,
+        });
+        var sh = attrs.ngShow || attrs.ngHide;
+        if (sh) scope.$watch(sh, function (v) {
+            var open = attrs.ngShow ? v : !v;
+            elem.dialog(open ? 'open' : 'close');
+            if (open) {
+                elem.unbind('keypress', keypress).bind('keypress', keypress);
+                setTimeout(function() {
+                    elem.find('input:visible:first').focus();
+                }, 10);
+            }
+        });
+    };
+});
+app.directive('uiDatepicker', function ($timeout) {
+    return {
+        scope: {
+            bind: '=uiDatepickerBind',
+            conf: '=uiDatepickerConf'
+        },
+        link: function (scope, elem, attrs, ctrl) {
+            elem.datepicker($.extend({
+                onSelect: function(d, i) {
+                    scope.bind = new Date(d).getTime();
+                    scope.$apply();
+                },
+            }, scope.conf));
+            scope.$watch('bind', function(v, v0) {
+                if (v !== v0)
+                    elem.datepicker('setDate', new Date(v));
+            })
+            $timeout(function () {
+                scope.bind = elem.datepicker('getDate').getTime();
+            }, 1);
+        },
+    };
+});
+app.controller('main', function ($scope, $http, $timeout, $location, apmSrv) {
+    var $user = $scope.user = {
+        list: function () {
+            apmSrv.exec('ListUser', {}, function(d) {
+                $user.data = d;
+            }, function(e) {
+                $user.msg = e;
+            });
+        },
+        update: function(act) {
+            var edit = $user.edit;
+
+            if (act == 'add')
+                edit.id = 0;
+
+            if (act == 'remove')
+                edit.username = '';
+            else if (!edit.username)
+                return edit.msg = 'empty username!';
+
+            if (!edit.name)
+                return edit.msg = 'name is required!';
+
+            if (!edit.change_pwd)
+                edit.password = '';
+            else if (!edit.password || !edit.password2 || edit.password !== edit.password2)
+                    return edit.msg = 'confirm your passwords!';
+
+            if (!edit.change_permission) {
+                edit.admin = -1;
+                edit.reslist = '';
+            }
+            if (!edit.resctrl)
+                edit.reslist = '';
+            else edit.reslist = edit.resctrl + keach(edit.resdict, function(k, v, d) {
+                var i = parseInt(k);
+                if (v && i > 0) d.push(i);
+            }, []).join(',');
+
+            edit.contact = edit.contact || '';
+
+            apmSrv.exec('UpdateUser', edit, function(d) {
+                // have to relogin
+                if (edit.username == $user.username) {
+                    if (edit.password)
+                        $user.password = edit.password;
+                    $user.get();
+                }
+                // have to reload list
+                if ($user.data)
+                    $user.list();
+                // close dialog
+                $user.edit = undefined;
+            }, function(e) {
+                edit.msg = e;
+            });
+        },
+        add: function () {
+            $user.update('add');
+        },
+        remove: function () {
+            $user.update('remove');
+        },
+        select: function(user) {
+            var edit = $user.edit = $.extend({}, user);
+            if (!edit.id)
+                edit.change_pwd = true;
+            edit.reslist = edit.reslist || '';
+            var ac_type = edit.reslist[0],
+                is_acl = ac_type == '+' || ac_type =='-',
+                ac_list = edit.reslist.substring(is_acl ? 1 : 0);
+            edit.resctrl = is_acl ? ac_type : '';
+            edit.resdict = ieach(ac_list.split(','), function(i, v, d) {
+                d[parseInt(v)] = true;
+            }, {})
+        },
+        get: function(n, p) {
+            if (n == 'autologin') {
+                n = '';
+                $user.autologin = true;
+            }
+            apmSrv.exec('GetUser', {
+                username: n || '',
+                password: p || '',
+            }, function (d) {
+                $user.info = d;
+                $user.msg = '';
+                $user.autologin = false;
+            }, function (e) {
+                if (n == 'logout') {
+                    location.reload();
+                }
+                else {
+                    $user.info = false;
+                    $user.msg = e;
+                }
+                if ($user.autologin) {
+                    $user.autologin = false;
+                    $user.msg = '';
+                }
+            });
+        },
+        login: function () {
+            if (!$user.username || !$user.password)
+                return $user.msg = 'please input your username and password';
+            $user.get($user.username, $user.password);
+            $user.password = '';
+        },
+        logout: function () {
+            $user.get('logout');
+        },
+    };
+    var $res = $scope.res = {
+        list: function () {
+            apmSrv.exec('ListRes', {}, function (d) {
+                $res.data = d;
+            });
+        },
+    };
+    function getToday() {
+        var date = new Date();
+        date.setHours(0);
+        date.setMinutes(0);
+        date.setSeconds(0);
+        return date;
+    }
+    function addDays(d, a) {
+        var date = new Date(d);
+        date.setDate(date.getDate() + a);
+        return date.getTime();
+    }
+    function loadDay(date, res, ls) {
+        var conf = $table.conf,
+            user = $user.info,
+            times = range(conf.end, conf.begin, 60),
+            nodes = {};
+        ieach(ls, function(i, d) {
+            times = times.filter(function(t) {
+                return t < d.begin || t > d.end;
+            });
+            times.push(d.begin);
+            times.push(d.end);
+            nodes[d.begin] = d;
+        })
+        return ieach(times.sort(function(a, b) {
+            return a - b;
+        }), function(i, t, d) {
+            var n = this[i + 1];
+            if (n >= 0) {
+                var node = nodes[t] || {begin:t, end:n, rid:parseInt(res), date:parseInt(date)};
+                    now = new Date(parseInt(node.date) + node.begin * 1000*60);
+                node.disabled = !(now >= conf.datepicker.minDate && now <= conf.datepicker.maxDate);
+                node.noaccess = !user.admin && node.uid > 0 && node.uid != user.id;
+                d.push(node);
+            }
+        }, [])
+    }
+    var $table = $scope.table = {
+        conf: {
+            begin: 7*60,
+            end: 22*60,
+            min: 15,
+            datepicker: {
+                minDate: new Date(addDays(getToday(), 1)),
+                maxDate: new Date(Date.now() + 1000*60*60*24*90),
+            },
+            special_time: {
+                720: 1,
+                1020: 1,
+            },
+            day_names: [
+                'Sun',
+                'Mon',
+                'Tus',
+                'Wen',
+                'Thu',
+                'Fri',
+                'Sat',
+            ],
+        },
+        addDays: function(a) {
+            $table.date = addDays($table.date, a);
+        },
+        listWeek: function(res) {
+            var dates = getWeekDays($table.date);
+            apmSrv.exec('Query', { dates:dates, rids:[res] }, function (d) {
+                $table.dates = dates;
+                $table.week = ieach(dates, function(i, date, data) {
+                    data[date] = $.datepicker.formatDate('yy-mm-dd', new Date(date));
+                }, {});
+                $table.data = ieach(dates, function(i, date, data) {
+                    var ls = d.filter(function(d) {
+                        return d.date == date;
+                    });
+                    data[date] = loadDay(date, res, ls);
+                }, {});
+            });
+        },
+        listDay: function(date, res) {
+            apmSrv.exec('Query', { dates:[date], rids:[res] }, function (ls) {
+                $table.data[date] = loadDay(date, res, ls);
+            });
+        },
+        update: function(act) {
+            var node = $table.edit;
+            node.contact = node.contact || '';
+            node.reason = node.reason || '';
+            if (act == 'add')
+                node.id = 0;
+            if (act == 'remove') {
+                node.end = node.begin;
+            }
+            else {
+                if (node.begin < $table.conf.begin)
+                    return node.msg = 'begin time should be later than '+mm2HHmm($table.conf.begin);
+                if (node.end > $table.conf.end)
+                    return node.msg = 'end time should be earlier than '+mm2HHmm($table.conf.end);
+                if (!(node.end-node.begin > $table.conf.min))
+                    return node.msg = 'request time is too short';
+            }
+            apmSrv.exec('Require', node, function(d) {
+                $table.listDay(node.date, node.rid);
+                $table.edit = undefined;
+            }, function(e) {
+                node.msg = e;
+            })
+        },
+        add: function() {
+            $table.update('add');
+        },
+        remove: function(id) {
+            $table.update('remove');
+        },
+        select: function(node0, node1) {
+            if (!node0 || !node1 || node0.date != node1.date)
+                return;
+            var t = node0.date,
+                ls = $table.data[t],
+                begin = Math.min(node0.begin, node1.begin),
+                end = Math.max(node0.end, node1.end);
+
+            var can_edit = $user.info.admin || ieach(ls, function(i, node) {
+                if (node.begin < end && node.end > begin &&
+                    (node.disabled || node.noaccess))
+                    return false;
+            }, true);
+
+            $table.edit = $.extend({}, node0, {
+                begin: begin,
+                end: end,
+                contact: node0.contact || (can_edit ? $user.info.contact : ''),
+                can_edit: can_edit,
+            });
+        },
+    };
+
+    function getFirstWeekDay(d) {
+        var date = new Date(d);
+        date.setDate(date.getDate() - date.getDay());
+        return date;
+    }
+    function getWeekDays(d) {
+        var date = getFirstWeekDay(d);
+        return range(7, 0, 1, function(i) {
+            var ret = date.getTime();
+            date.setDate(date.getDate() + 1);
+            return ret;
+        });
+    }
+
+    // if selected date changed
+    $scope.$watch(function () {
+        return $res.selected + ':' + getFirstWeekDay($table.date);
+    }, function (v, v0) {
+        if (v !== v0 && $res.selected > 0)
+            $table.listWeek($res.selected);
+    });
+    
+    // share location path
+    $scope.$watch(function() {
+        return ($user.info && $user.info.id) + ':' + $location.path();
+    }, function(v, v0) {
+        if (!$user.info)
+            return $scope.path = '';
+        var p = $scope.path = $location.path();
+        if (!p)
+            $location.path('/book');
+        else if (p == '/book')
+            $res.list();
+        else if (p == '/admin') {
+            if (!$user.info.admin) {
+                $location.path('/book');
+            }
+            else {
+                $user.list();
+                // have to user $res.data when edit users
+                if (!$res.data)
+                    $res.list();
+            }
+        }
+    });
+
+    // try auto login
+    $user.get('autologin');
+});
+</script>
+</body>
+</html>
